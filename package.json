@@ -10,10 +10,10 @@
   },
   "resolutions": {
     "glob": "^10.5.0",
-    "tar": "7.5.11",
-    "js-yaml": "4.1.1",
+    "tar": "7.5.21",
+    "js-yaml": "4.3.2",
     "yauzl": "3.2.1",
-    "immutable": "5.1.5",
+    "immutable": "5.1.8",
     "minimatch": "^10.2.3",
     "basic-ftp": "5.3.1",
     "flatted": "3.4.2"
@@ -28,11 +28,11 @@
     "esbuild": "^0.28.1",
     "flatted": "3.4.2",
     "govuk-frontend": "^5.11.1",
-    "immutable": "^5.1.5",
-    "js-yaml": "^4.1.1",
+    "immutable": "^5.1.8",
+    "js-yaml": "^4.3.2",
     "puppeteer": "25.2.1",
     "sass": "^1.97.2",
-    "tar": "^7.5.11",
+    "tar": "^7.5.21",
     "yauzl": "^3.2.1"
   },
   "devDependencies": {
