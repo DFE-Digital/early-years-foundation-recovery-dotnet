@@ -1,0 +1,17 @@
+@model EarlyYearsFoundationRecovery.Web.Models.TermsModel
+@{
+    ViewData["Title"] = "Terms and conditions";
+}
+<h1>Terms and conditions</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<p>You must agree to the terms and conditions before you can use the training service.</p>
+<form asp-action="Terms" method="post">
+    <div class="form-group">
+        <label class="checkbox-label">
+            <input asp-for="Accepted" type="checkbox" />
+            I agree to the terms and conditions
+        </label>
+        <span asp-validation-for="Accepted" class="field-error"></span>
+    </div>
+    <button class="button" type="submit">Continue</button>
+</form>

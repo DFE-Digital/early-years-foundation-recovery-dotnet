@@ -1,0 +1,20 @@
+@model EarlyYearsFoundationRecovery.Web.Models.ExperienceModel
+@{
+    ViewData["Title"] = "Your experience";
+    var options = (IReadOnlyList<EarlyYearsFoundationRecovery.Application.Contracts.RegistrationChoice>)ViewBag.Experiences;
+}
+<h1>How long have you worked in early years?</h1>
+<form asp-action="Experience" method="post">
+    <div class="form-group">
+        <label asp-for="EarlyYearsExperience">Experience</label>
+        <select asp-for="EarlyYearsExperience" class="select-input">
+            <option value="">Select an answer</option>
+            @foreach (var option in options)
+            {
+                <option value="@option.Id">@option.Name</option>
+            }
+        </select>
+        <span asp-validation-for="EarlyYearsExperience" class="field-error"></span>
+    </div>
+    <button class="button" type="submit">Continue</button>
+</form>

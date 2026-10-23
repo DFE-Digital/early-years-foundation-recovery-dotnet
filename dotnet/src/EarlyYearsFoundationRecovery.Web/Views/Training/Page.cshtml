@@ -1,0 +1,60 @@
+@model EarlyYearsFoundationRecovery.Web.Models.TrainingPageViewModel
+@{
+    ViewData["Title"] = Model.Page.Title;
+    var isQuestion = Model.Page.PageType is "formative" or "summative" or "confidence" or "pre_confidence";
+}
+<p class="back-link"><a asp-action="Module" asp-route-moduleName="@Model.Module.Name">Back to @Model.Module.Title</a></p>
+<p class="eyebrow">@Model.Module.Title</p>
+<h1>@Model.Page.Title</h1>
+
+@if (isQuestion)
+{
+    <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+    <p>@Model.Page.Body</p>
+    <form asp-action="Answer" asp-route-moduleName="@Model.Module.Name" asp-route-questionName="@Model.Page.Name" method="post">
+        <fieldset class="form-group">
+            <legend>@Model.Page.Title</legend>
+            @foreach (var option in Model.Page.Options ?? [])
+            {
+                <label class="checkbox-label">
+                    <input type="@(Model.Page.AllowsMultipleAnswers ? "checkbox" : "radio")" name="SelectedAnswerIds" value="@option.Id" />
+                    @option.Label
+                </label>
+            }
+        </fieldset>
+        <button class="button" type="submit">Check answer</button>
+    </form>
+}
+else
+{
+    <div class="content-body">
+        <p>@Model.Page.Body</p>
+    </div>
+    @if (Model.Page.PageType == "assessment_results" && Model.LatestAssessment?.CompletedAt is not null)
+    {
+        <div class="notification @(Model.LatestAssessment.Passed == true ? "notification--success" : "notification--info")" role="status">
+            <h2>Assessment result</h2>
+            <p>Your score: @Model.LatestAssessment.Score%</p>
+            <p>@(Model.LatestAssessment.Passed == true ? "You passed." : "You did not pass. You can try again.")</p>
+        </div>
+    }
+    @if (Model.Page.PageType == "thankyou")
+    {
+        <div class="notification notification--success" role="status">
+            <p>Your module is complete.</p>
+            <a asp-controller="Training" asp-action="Index">Return to my modules</a>
+        </div>
+    }
+    @if (Model.Page.PageType == "certificate")
+    {
+        <p><button class="button" type="button" onclick="window.print()">Print certificate</button></p>
+    }
+    @if (Model.NextPage is not null)
+    {
+        <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
+    }
+    else
+    {
+        <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+    }
+}

@@ -1,0 +1,19 @@
+@model EarlyYearsFoundationRecovery.Web.Models.NameModel
+@{
+    ViewData["Title"] = "Your name";
+}
+<h1>What is your name?</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="Name" method="post">
+    <div class="form-group">
+        <label asp-for="FirstName">First name</label>
+        <input asp-for="FirstName" autocomplete="given-name" class="text-input" />
+        <span asp-validation-for="FirstName" class="field-error"></span>
+    </div>
+    <div class="form-group">
+        <label asp-for="LastName">Last name</label>
+        <input asp-for="LastName" autocomplete="family-name" class="text-input" />
+        <span asp-validation-for="LastName" class="field-error"></span>
+    </div>
+    <button class="button" type="submit">Continue</button>
+</form>

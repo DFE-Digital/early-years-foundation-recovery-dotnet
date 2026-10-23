@@ -1,0 +1,29 @@
+@model EarlyYearsFoundationRecovery.Web.Models.RoleModel
+@{
+    ViewData["Title"] = "Your role";
+    var roles = (IReadOnlyList<EarlyYearsFoundationRecovery.Application.Contracts.RegistrationChoice>)ViewBag.Roles;
+}
+<h1>What is your role?</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="Role" method="post">
+    <div class="form-group">
+        <label asp-for="RoleType">Role</label>
+        <select asp-for="RoleType" class="select-input">
+            <option value="">Select a role</option>
+            @foreach (var role in roles)
+            {
+                <option value="@role.Name">@role.Name</option>
+            }
+        </select>
+        <span asp-validation-for="RoleType" class="field-error"></span>
+    </div>
+    @if (string.Equals(Model.RoleType, "other", StringComparison.OrdinalIgnoreCase))
+    {
+        <div class="form-group">
+            <label asp-for="RoleTypeOther">Describe your role</label>
+            <input asp-for="RoleTypeOther" class="text-input" />
+            <span asp-validation-for="RoleTypeOther" class="field-error"></span>
+        </div>
+    }
+    <button class="button" type="submit">Continue</button>
+</form>

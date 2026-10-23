@@ -1,0 +1,30 @@
+@model EarlyYearsFoundationRecovery.Web.Models.SettingModel
+@{
+    ViewData["Title"] = "Your work setting";
+    var settings = (IReadOnlyList<EarlyYearsFoundationRecovery.Application.Contracts.RegistrationSetting>)ViewBag.Settings;
+}
+<h1>What type of setting do you work in?</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="Setting" method="post">
+    <div class="form-group">
+        <label asp-for="SettingType">Setting type</label>
+        <select asp-for="SettingType" class="select-input">
+            <option value="">Select a setting type</option>
+            @foreach (var setting in settings)
+            {
+                <option value="@setting.Id">@setting.Name</option>
+            }
+            <option value="other">Other</option>
+        </select>
+        <span asp-validation-for="SettingType" class="field-error"></span>
+    </div>
+    @if (string.Equals(Model.SettingType, "other", StringComparison.OrdinalIgnoreCase))
+    {
+        <div class="form-group">
+            <label asp-for="SettingTypeOther">Describe your setting</label>
+            <input asp-for="SettingTypeOther" class="text-input" />
+            <span asp-validation-for="SettingTypeOther" class="field-error"></span>
+        </div>
+    }
+    <button class="button" type="submit">Continue</button>
+</form>

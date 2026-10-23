@@ -1,0 +1,30 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AssessmentResultViewModel
+@{
+    ViewData["Title"] = "Your answer";
+}
+<div class="notification @(Model.Result.Correct ? "notification--success" : "notification--info")" role="status">
+    <h1>@(Model.Result.Correct ? "That's right" : "That's not quite right")</h1>
+    @if (Model.Result.IsComplete)
+    {
+        <p>Your assessment score is @Model.Result.Score%.</p>
+        <p>@(Model.Result.Passed == true ? "You passed the assessment." : "You did not pass. You can try again.")</p>
+    }
+</div>
+@if (Model.Result.IsComplete)
+{
+    <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+}
+else
+{
+    var pages = Model.Module.Pages;
+    var questionIndex = pages.ToList().FindIndex(page => page.Name == Model.Question.Name);
+    var next = questionIndex >= 0 && questionIndex + 1 < pages.Count ? pages[questionIndex + 1] : null;
+    if (next is not null)
+    {
+        <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@next.Name">Continue</a>
+    }
+    else
+    {
+        <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+    }
+}

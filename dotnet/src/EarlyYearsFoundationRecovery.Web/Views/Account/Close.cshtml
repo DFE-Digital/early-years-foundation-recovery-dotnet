@@ -1,0 +1,21 @@
+@model EarlyYearsFoundationRecovery.Web.Models.CloseAccountModel
+@{
+    ViewData["Title"] = "Close your account";
+}
+<h1>Why are you closing your account?</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="Close" method="post">
+    <fieldset class="form-group">
+        <legend>Select a reason</legend>
+        <label class="radio-label"><input type="radio" asp-for="Reason" value="not_using" /> I no longer need the training</label>
+        <label class="radio-label"><input type="radio" asp-for="Reason" value="technical_issue" /> I am experiencing a technical issue</label>
+        <label class="radio-label"><input type="radio" asp-for="Reason" value="other" /> Other</label>
+        <span asp-validation-for="Reason" class="field-error"></span>
+    </fieldset>
+    <div class="form-group">
+        <label asp-for="CustomReason">If you selected other, tell us why (optional)</label>
+        <input asp-for="CustomReason" class="text-input" />
+    </div>
+    <button class="button" type="submit">Continue</button>
+    <a class="button-link" asp-action="Index">Cancel</a>
+</form>

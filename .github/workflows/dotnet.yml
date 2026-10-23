@@ -1,0 +1,25 @@
+name: .NET
+
+on:
+  push:
+    paths:
+      - "dotnet/**"
+      - ".github/workflows/dotnet.yml"
+  pull_request:
+    paths:
+      - "dotnet/**"
+      - ".github/workflows/dotnet.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore dotnet/EarlyYearsFoundationRecovery.slnx
+      - run: dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --no-restore --configuration Release

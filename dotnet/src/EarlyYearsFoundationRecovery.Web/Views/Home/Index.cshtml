@@ -1,0 +1,25 @@
+@{
+    ViewData["Title"] = "Early years child development training";
+}
+
+<div class="hero">
+    <div>
+        <p class="eyebrow">Department for Education</p>
+        <h1>Early years child development training</h1>
+        <p class="lead">Build your knowledge of child development and support the children you work with.</p>
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <a class="button" asp-controller="Training" asp-action="Index">Continue your training</a>
+        }
+        else
+        {
+            <a class="button" asp-controller="Account" asp-action="SignIn">Sign in to start training</a>
+        }
+    </div>
+</div>
+
+<section class="content-section">
+    <h2>About the training</h2>
+    <p>The training is made up of modules covering child development from pregnancy to age five.</p>
+    <p>Your progress is saved when you sign in.</p>
+</section>

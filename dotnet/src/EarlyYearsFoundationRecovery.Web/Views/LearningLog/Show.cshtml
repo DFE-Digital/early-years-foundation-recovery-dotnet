@@ -1,0 +1,16 @@
+@model EarlyYearsFoundationRecovery.Web.Models.LearningNoteViewModel
+@{
+    ViewData["Title"] = "Learning log";
+}
+<h1>Learning log</h1>
+<p>Use your learning log to save notes as you work through the module.</p>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="Update" asp-route-moduleName="@Model.ModuleName" method="post">
+    <div class="form-group">
+        <label asp-for="Note.Content">Your notes</label>
+        <textarea asp-for="Note.Content" class="text-input textarea-input" rows="10" maxlength="20000"></textarea>
+        <span asp-validation-for="Note.Content" class="field-error"></span>
+        <p class="hint">Your notes are private to your account.</p>
+    </div>
+    <button class="button" type="submit">Save notes</button>
+</form>

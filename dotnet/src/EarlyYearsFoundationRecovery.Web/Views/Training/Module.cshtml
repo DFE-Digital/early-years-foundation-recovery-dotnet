@@ -1,0 +1,21 @@
+@model EarlyYearsFoundationRecovery.Web.Models.TrainingModuleDetailViewModel
+@{
+    ViewData["Title"] = Model.Module.Title;
+}
+<p class="back-link"><a asp-action="Index">Back to my modules</a></p>
+<h1>@Model.Module.Title</h1>
+<p>@Model.VisitedPageCount of @Model.Module.Pages.Count pages visited</p>
+<h2>Module content</h2>
+<ol class="content-list">
+    @foreach (var contentPage in Model.Module.Pages)
+    {
+        <li>
+            <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@contentPage.Name">@contentPage.Title</a>
+        </li>
+    }
+</ol>
+@if (Model.Module.Pages.Count > 0)
+{
+    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.Module.Pages[0].Name">@(Model.VisitedPageCount == 0 ? "Start module" : "Continue module")</a>
+}
+<p><a asp-controller="LearningLog" asp-action="Show" asp-route-moduleName="@Model.Module.Name">Open your learning log for this module</a></p>

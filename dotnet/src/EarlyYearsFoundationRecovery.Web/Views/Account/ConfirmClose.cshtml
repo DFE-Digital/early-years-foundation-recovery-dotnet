@@ -1,0 +1,10 @@
+@model EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount
+@{
+    ViewData["Title"] = "Confirm account closure";
+}
+<h1>Confirm you want to close your account</h1>
+<p>Closing your account will sign you out and redact your personal information. You will no longer be able to access saved training progress or learning notes.</p>
+<form asp-action="ConfirmClosePost" method="post">
+    <button class="button button--warning" type="submit">Close account</button>
+    <a class="button-link" asp-controller="Account" asp-action="Index">Cancel</a>
+</form>

@@ -1,0 +1,20 @@
+@model EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount
+@{
+    ViewData["Title"] = "Check your answers";
+}
+<h1>Check your answers</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<dl class="summary-list">
+    <dt>Terms and conditions</dt><dd>@(Model.TermsAndConditionsAgreedAt is null ? "Not agreed" : "Agreed") <a asp-action="Terms">Change</a></dd>
+    <dt>Name</dt><dd>@Model.FirstName @Model.LastName <a asp-action="Name">Change</a></dd>
+    <dt>Country</dt><dd>@Model.Country <a asp-action="Location">Change</a></dd>
+    <dt>Local authority</dt><dd>@Model.LocalAuthority</dd>
+    <dt>Setting</dt><dd>@ViewBag.SettingName <a asp-action="Setting">Change</a></dd>
+    <dt>Role</dt><dd>@(Model.RoleType == "other" ? Model.RoleTypeOther : Model.RoleType) <a asp-action="Role">Change</a></dd>
+    <dt>Experience</dt><dd>@Model.EarlyYearsExperience <a asp-action="Experience">Change</a></dd>
+    <dt>Training emails</dt><dd>@Model.TrainingEmails <a asp-action="Preferences">Change</a></dd>
+    <dt>Research participation</dt><dd>@Model.ResearchParticipant</dd>
+</dl>
+<form asp-action="CompleteRegistration" method="post">
+    <button class="button" type="submit">Complete registration</button>
+</form>
