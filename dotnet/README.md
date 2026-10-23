@@ -33,4 +33,24 @@ dotnet run --project dotnet/src/EarlyYearsFoundationRecovery.Web
 
 In Development, visit `/account/sign-in` and use the local test-user sign-in. Outside Development, configure Gov.UK One Login with `Authentication__GovOne__Authority`, `Authentication__GovOne__ClientId`, and `Authentication__GovOne__PrivateKeyPath`. Set `Contentful__Space` and either `Contentful__DeliveryToken` or (when `Contentful__Preview=true`) `Contentful__PreviewToken` to load real training and registration content.
 
-Supply secrets only through environment variables or a local secret store; do not commit credentials or private keys. Do not point this initial application at production data. The database migration/import strategy is intentionally deferred.
+### Local Contentful settings
+
+The web project is configured for .NET user secrets, automatically loaded in Development. From the repository root:
+
+```sh
+cd dotnet/src/EarlyYearsFoundationRecovery.Web
+dotnet user-secrets set "Contentful:Space" "YOUR_SPACE_ID"
+dotnet user-secrets set "Contentful:Environment" "YOUR_ENVIRONMENT_ID"
+```
+
+In macOS's default zsh terminal, enter the token without putting it in shell history:
+
+```zsh
+read -s "contentful_token?Paste Contentful Delivery token: "; echo
+dotnet user-secrets set "Contentful:DeliveryToken" "$contentful_token"
+unset contentful_token
+```
+
+Restart the app after editing secrets. Environment variables and command-line arguments override user secrets. For unpublished content, set `Contentful:Preview` to `true` and use `Contentful:PreviewToken` instead of a delivery token. The former `appsettings.Local.json` file is no longer loaded.
+
+Supply secrets only through environment variables or a local secret store; do not commit credentials or private keys. User secrets are stored outside the repository as plain text, not encrypted, and are for development only. Do not point this initial application at production data. The database migration/import strategy is intentionally deferred.

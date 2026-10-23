@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\EarlyYearsFoundationRecovery.Application\EarlyYearsFoundationRecovery.Application.csproj" />
@@ -17,6 +17,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>1aedd72f-76a5-450e-8502-ea364dd2b740</UserSecretsId>
   </PropertyGroup>
 
 </Project>
