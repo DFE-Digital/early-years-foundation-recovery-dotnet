@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run .NET development app",
+			"type": "process",
+			"command": "dotnet",
+			"args": [
+				"run",
+				"--project",
+				"dotnet/src/EarlyYearsFoundationRecovery.Web",
+				"--launch-profile",
+				"https",
+				"--",
+				"--ConnectionStrings:Application=Host=localhost;Database=eyfr_dotnet;Username=${env:USER}"
+			],
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
