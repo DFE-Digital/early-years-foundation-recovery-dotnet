@@ -5,7 +5,8 @@ public sealed record TrainingModule(
     string Title,
     int Position,
     bool IsDraft,
-    IReadOnlyList<TrainingPage> Pages);
+    IReadOnlyList<TrainingPage> Pages,
+    string Criteria = "");
 
 public sealed record TrainingPage(
     string Name,

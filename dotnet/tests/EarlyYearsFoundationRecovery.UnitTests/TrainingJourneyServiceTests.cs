@@ -9,11 +9,62 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using System.Security.Claims;
+using EarlyYearsFoundationRecovery.Web.Content;
 
 namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class TrainingJourneyServiceTests
 {
+    [Fact]
+    public async Task CertificateDownloadUsesTheAuthenticatedLearnerAndRecordedCompletion()
+    {
+        var module = ConfidenceModule("summative") with { Criteria = "- Learn about development" };
+        module = module with
+        {
+            Pages = [
+                module.Pages[0],
+                module.Pages[1] with { PageType = "thankyou" },
+                new TrainingPage("certificate", "Certificate", "certificate", "")
+            ]
+        };
+        var controller = TestController(module);
+        await controller.Answer(
+            module.Name, "q1", new TrainingAnswerModel { SelectedAnswerIds = ["1"] }, CancellationToken.None);
+        await controller.Page(module.Name, "next", CancellationToken.None);
+        var preview = Assert.IsType<ViewResult>(await controller.Certificate(module.Name, CancellationToken.None));
+        var model = Assert.IsType<CertificateViewModel>(preview.Model);
+        Assert.Equal("Alex Example", model.Certificate.LearnerName);
+        Assert.Equal(module.Criteria, model.Certificate.Criteria);
+        Assert.Equal(module.Title, model.Certificate.ModuleTitle);
+
+        controller.Request.Path = "/training/module-one/certificate.pdf";
+        var download = Assert.IsType<FileContentResult>(await controller.Certificate(module.Name, CancellationToken.None));
+        Assert.Equal("application/pdf", download.ContentType);
+        Assert.Equal("certificate-of-achievement.pdf", download.FileDownloadName);
+        Assert.True(download.FileContents.AsSpan().StartsWith("%PDF-"u8));
+
+        controller.Request.Path = "/training/module-one/certificate";
+        var repeated = Assert.IsType<ViewResult>(await controller.Certificate(module.Name, CancellationToken.None));
+        Assert.Equal(model.Certificate.CompletedAt,
+            Assert.IsType<CertificateViewModel>(repeated.Model).Certificate.CompletedAt);
+    }
+
+    [Fact]
+    public async Task DirectPdfDownloadCannotBypassCompletion()
+    {
+        var module = ConfidenceModule("summative");
+        module = module with
+        {
+            Pages = [module.Pages[0], new TrainingPage("certificate", "Certificate", "certificate", "")]
+        };
+        var controller = TestController(module);
+        controller.Request.Path = "/training/module-one/certificate.pdf";
+
+        var result = Assert.IsType<RedirectToActionResult>(
+            await controller.Certificate(module.Name, CancellationToken.None));
+        Assert.Equal(nameof(TrainingController.Module), result.ActionName);
+    }
+
     [Theory]
     [InlineData("1", true)]
     [InlineData("2", false)]
@@ -82,6 +133,13 @@ public sealed class TrainingJourneyServiceTests
         var result = Assert.IsType<RedirectToActionResult>(await controller.Page(
             "module-one", "next", CancellationToken.None));
 
+        if (pageType == "certificate")
+        {
+            Assert.Equal(nameof(TrainingController.Certificate), result.ActionName);
+            result = Assert.IsType<RedirectToActionResult>(await controller.Certificate(
+                "module-one", CancellationToken.None));
+        }
+
         Assert.Equal(nameof(TrainingController.Module), result.ActionName);
         Assert.IsType<string>(controller.TempData["TrainingNotice"]);
         var overview = Assert.IsType<ViewResult>(await controller.Module("module-one", CancellationToken.None));
@@ -106,7 +164,7 @@ public sealed class TrainingJourneyServiceTests
 
         Assert.IsType<RedirectToActionResult>(await controller.Page("module-one", "certificate", CancellationToken.None));
         Assert.IsType<ViewResult>(await controller.Page("module-one", "next", CancellationToken.None));
-        Assert.IsType<ViewResult>(await controller.Page("module-one", "certificate", CancellationToken.None));
+        Assert.IsType<ViewResult>(await controller.Certificate("module-one", CancellationToken.None));
     }
 
     [Theory]
@@ -347,7 +405,8 @@ public sealed class TrainingJourneyServiceTests
             new AccountService(new InMemoryAccountStore(account), notes, TimeProvider.System),
             new TrainingJourneyService(
                 new InMemoryContentProvider(module),
-                new InMemoryProgressStore(), notes, TimeProvider.System))
+                new InMemoryProgressStore(), notes, TimeProvider.System),
+            new StubCertificatePdfRenderer())
         {
             ControllerContext = new ControllerContext
             {
@@ -359,6 +418,12 @@ public sealed class TrainingJourneyServiceTests
         };
         controller.TempData = new TempDataDictionary(controller.HttpContext, new InMemoryTempDataProvider());
         return controller;
+    }
+
+    private sealed class StubCertificatePdfRenderer : ICertificatePdfRenderer
+    {
+        public Task<byte[]> GenerateAsync(CertificateData certificate, CancellationToken cancellationToken) =>
+            Task.FromResult("%PDF-test"u8.ToArray());
     }
 
     private sealed class InMemoryTempDataProvider : ITempDataProvider

@@ -44,10 +44,13 @@ public sealed class WebJourneySmokeTests : IClassFixture<WebApplicationFactory<P
         Assert.Contains("development-sign-in", html);
     }
 
-    [Fact]
-    public async Task TrainingPagesRequireAuthentication()
+    [Theory]
+    [InlineData("/training")]
+    [InlineData("/training/module-one/certificate")]
+    [InlineData("/training/module-one/certificate.pdf")]
+    public async Task TrainingPagesRequireAuthentication(string path)
     {
-        var response = await _client.GetAsync("/training");
+        var response = await _client.GetAsync(path);
 
         Assert.Equal(System.Net.HttpStatusCode.Redirect, response.StatusCode);
         Assert.StartsWith("/account/sign-in", response.Headers.Location?.PathAndQuery);

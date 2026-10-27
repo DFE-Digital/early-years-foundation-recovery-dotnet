@@ -1,5 +1,6 @@
 using Ganss.Xss;
 using Markdig;
+using Markdig.Renderers;
 using Microsoft.AspNetCore.Html;
 
 namespace EarlyYearsFoundationRecovery.Web.Content;
@@ -13,8 +14,22 @@ public sealed class TrainingContentRenderer
 
     private readonly HtmlSanitizer _sanitizer = CreateSanitizer();
 
-    public HtmlString Render(string markdown) =>
-        new(_sanitizer.Sanitize(Markdown.ToHtml(markdown, Pipeline)));
+    public HtmlString Render(string markdown)
+    {
+        var document = Markdown.Parse(markdown, Pipeline);
+        markdown = TrainingShortcodes.SeparateMarkers(markdown, document);
+        document = Markdown.Parse(markdown, Pipeline);
+        TrainingShortcodes.ApplyLinks(document, markdown);
+        TrainingShortcodes.Apply(document, markdown);
+        TrainingColumnsLayout.Apply(document, markdown);
+        using var writer = new StringWriter();
+        var renderer = new HtmlRenderer(writer);
+        Pipeline.Setup(renderer);
+        renderer.ObjectRenderers.Insert(0, new TrainingColumnsLayout.Renderer());
+        renderer.ObjectRenderers.Insert(0, new TrainingShortcodes.Renderer());
+        renderer.Render(document);
+        return new HtmlString(_sanitizer.Sanitize(writer.ToString()));
+    }
 
     private static HtmlSanitizer CreateSanitizer()
     {

@@ -96,10 +96,6 @@ else
             <a asp-controller="Training" asp-action="Index">Return to my modules</a>
         </div>
     }
-    @if (Model.Page.PageType == "certificate")
-    {
-        <p><button class="button" type="button" onclick="window.print()">Print certificate</button></p>
-    }
     @if (Model.NextPage is not null)
     {
         <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>

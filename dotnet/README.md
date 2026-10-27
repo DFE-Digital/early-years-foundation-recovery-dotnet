@@ -16,7 +16,15 @@ The initial implementation targets Gov.UK One Login authentication, registration
 
 ## Local setup
 
-Training page, question and video transcript bodies render Markdown headings, lists, links and tables. Raw HTML is disabled and generated HTML is sanitized using an allowlist based on the Rails content helper. YouTube and Vimeo video entries render responsive embeds with expandable transcripts. Invalid IDs and unsupported providers produce explicit content errors rather than arbitrary embed URLs. Linked assets and Contentful rich-text fidelity still require further parity work.
+Training page, question and video transcript bodies render Markdown headings, lists, links, images and tables. Contentful rich-text documents are converted into that same sanitized Markdown pipeline, including headings, paragraphs, bold/italic/code marks, nested lists, blockquotes, HTTP(S)/root-relative links, and simple tables with a header row and single-line, single-paragraph cells. This also applies to module criteria used on certificates. Literal Markdown syntax in rich-text text nodes stays literal; raw HTML is disabled.
+
+Embedded rich-text image assets resolve from the Contentful response, including localized file fields. Protocol-relative image URLs become HTTPS, the asset description supplies alternative text (empty descriptions produce decorative images), and training images scale down to fit their container. PNG, JPEG, GIF, WebP and AVIF assets are supported. Missing assets, invalid URLs, unsupported asset types, nodes, marks or table layouts raise explicit content errors instead of silently dropping content. Embedded entries, entry/asset hyperlinks, underline/superscript/subscript marks and complex rich-text tables remain unsupported; full Contentful parity is not yet claimed.
+
+Rails `{two_thirds}` blocks render text beside their final image, stacking on narrow screens. Both spaced and compact blocks (without blank lines between text, image and markers) are supported. `{brain}`, `{book}` and `{info}` blocks render learning prompts headed "Reflection point", "Further reading" and "In your setting". `{quote}` blocks use their final separate paragraph as a citation. `{button}` wraps a Markdown link styled as a button; `{external}` wraps a link opening in a new tab with an explicit notice and `noopener noreferrer`.
+
+The renderer transforms parsed Markdown rather than enabling raw CMS HTML; markers inside code or escaped literal text stay literal. Malformed or unmatched markers raise explicit content errors. Prompts can nest; nested two-thirds layouts are not supported. Prompt headings and styling are implemented without adding an icon-font dependency; the decorative Rails icons are not reproduced. Rails inset-text and details shortcodes still need parity work.
+
+YouTube and Vimeo video entries render responsive embeds with expandable transcripts. Invalid IDs and unsupported providers produce explicit content errors rather than arbitrary embed URLs.
 
 Video pages include a direct player link if an embedded player is blocked. Live Vimeo embed metadata and transcript toggling have been checked locally, but playback in a normal browser still needs verification; the integrated browser aborted the external iframe request.
 
@@ -28,7 +36,28 @@ Formative answers become read-only after submission. Summative questions save an
 
 Summative submissions redirect to a GET results page so refreshing results does not resubmit answers. Contentful assessment-results pages use that same summary, and unfinished attempts do not display a final score.
 
-Direct navigation to the thank-you page does not mark a module complete without a passing assessment. Certificate pages require recorded module completion. Certificate PDF generation and full completion-flow parity remain unfinished.
+Direct navigation to the thank-you page does not mark a module complete without a passing assessment. Certificate pages and PDF downloads require recorded module completion. Certificates include the current account name, module title, Contentful learning criteria, completion date in UK local time, and the Department for Education logo. Downloads are generated locally with Playwright/Chromium, with JavaScript and external network requests disabled, and are served with no-store caching. Full completion-flow parity remains unfinished.
+
+### Certificate PDF runtime
+
+After building the web project, install the matching Playwright Chromium runtime once per machine (and again when updating Playwright). With PowerShell available:
+
+```sh
+dotnet build dotnet/src/EarlyYearsFoundationRecovery.Web
+pwsh dotnet/src/EarlyYearsFoundationRecovery.Web/bin/Debug/net10.0/playwright.ps1 install chromium
+```
+
+Alternatively, on macOS without PowerShell:
+
+```sh
+cd dotnet/src/EarlyYearsFoundationRecovery.Web/bin/Debug/net10.0
+dotnet exec \
+  --runtimeconfig EarlyYearsFoundationRecovery.Web.runtimeconfig.json \
+  --depsfile EarlyYearsFoundationRecovery.Web.deps.json \
+  Microsoft.Playwright.dll install chromium
+```
+
+Run installation as the same user that runs the application. Linux deployments need Chromium's system libraries too (`install --with-deps chromium`). CI installs these before running PDF tests. Certificate PDF tests open the generated PDF to verify its text, A4 dimensions and page count. No external PDF service is used; generated files are returned directly without saving personal certificates to disk. The PDF endpoint is `/training/{moduleName}/certificate.pdf`.
 
 Install the .NET 10 SDK and PostgreSQL 15 or later. The Development profile uses a local PostgreSQL database named `eyfr_dotnet` and sample training content. Set `ConnectionStrings__Application` if your local connection differs.
 

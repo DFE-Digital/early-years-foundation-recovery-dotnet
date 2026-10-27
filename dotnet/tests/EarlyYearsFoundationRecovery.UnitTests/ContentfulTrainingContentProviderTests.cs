@@ -1,6 +1,9 @@
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
+using EarlyYearsFoundationRecovery.Application.Contracts;
 using EarlyYearsFoundationRecovery.Infrastructure.Contentful;
+using EarlyYearsFoundationRecovery.Web.Content;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 
@@ -8,6 +11,181 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class ContentfulTrainingContentProviderTests
 {
+    [Fact]
+    public async Task RichTextIsUsedForCertificateCriteriaAndVideoTranscriptsToo()
+    {
+        const string richText = """
+            {"nodeType":"document","content":[
+              {"nodeType":"heading-2","content":[{"nodeType":"text","value":"Child development"}]},
+              {"nodeType":"paragraph","content":[{"nodeType":"text","value":"<script>alert(1)</script>"}]}
+            ]}
+            """;
+        var response = JsonNode.Parse(VideoResponse)!;
+        response["items"]![0]!["fields"]!["criteria"] = JsonNode.Parse(richText);
+        response["includes"]!["Entry"]![0]!["fields"]!["transcript"] = JsonNode.Parse(richText);
+        response["includes"]!["Entry"]![0]!["fields"]!["video_id"] = "";
+        var module = await MapModuleResponseAsync(response.ToJsonString());
+
+        var renderer = new TrainingContentRenderer();
+        foreach (var markdown in new[] { module.Criteria, Assert.Single(module.Pages).Video!.Transcript })
+        {
+            var html = renderer.Render(markdown).Value!;
+            Assert.Contains("<h2>Child development</h2>", html);
+            Assert.Contains("&lt;script&gt;", html);
+            Assert.DoesNotContain("<script", html);
+        }
+    }
+
+    [Fact]
+    public async Task RichTextPreservesTableHeadersAndCells()
+    {
+        var page = await MapRichTextPageAsync("""
+            {"nodeType":"document","content":[{"nodeType":"table","content":[
+              {"nodeType":"table-row","content":[
+                {"nodeType":"table-header-cell","content":[{"nodeType":"paragraph","content":[{"nodeType":"text","value":"Topic"}]}]},
+                {"nodeType":"table-header-cell","content":[{"nodeType":"paragraph","content":[{"nodeType":"text","value":"Description"}]}]}
+              ]},
+              {"nodeType":"table-row","content":[
+                {"nodeType":"table-cell","content":[{"nodeType":"paragraph","content":[{"nodeType":"text","value":"Learning | development"}]}]},
+                {"nodeType":"table-cell","content":[{"nodeType":"paragraph","content":[{"nodeType":"text","value":"Child development"}]}]}
+              ]}
+            ]}]}
+            """);
+
+        var html = new TrainingContentRenderer().Render(page.Body).Value!;
+        Assert.Contains("<table>", html);
+        Assert.Contains("<th>Topic</th>", html);
+        Assert.Contains("<td>Learning | development</td>", html);
+        Assert.Contains("<td>Child development</td>", html);
+    }
+
+    [Theory]
+    [InlineData("code", "a `value` and **literal**", "<code>a `value` and **literal**</code>")]
+    [InlineData("bold", " padded ", " <strong>padded</strong> ")]
+    public async Task RichTextPreservesLiteralCodeAndWhitespaceAroundEmphasis(string mark, string value, string expected)
+    {
+        var document = new JsonObject
+        {
+            ["nodeType"] = "document",
+            ["content"] = new JsonArray(new JsonObject
+            {
+                ["nodeType"] = "paragraph",
+                ["content"] = new JsonArray(
+                    new JsonObject { ["nodeType"] = "text", ["value"] = "Before" },
+                    new JsonObject
+                    {
+                        ["nodeType"] = "text", ["value"] = value,
+                        ["marks"] = new JsonArray(new JsonObject { ["type"] = mark })
+                    },
+                    new JsonObject { ["nodeType"] = "text", ["value"] = "after" })
+            })
+        };
+        var page = await MapRichTextPageAsync(document.ToJsonString());
+
+        Assert.Contains(expected, new TrainingContentRenderer().Render(page.Body).Value!);
+    }
+
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("data:text/html,unsafe")]
+    [InlineData("https://example.test\\path")]
+    public async Task UnsafeRichTextLinksRaiseAnExplicitContentError(string destination)
+    {
+        var document = JsonNode.Parse("""
+            {"nodeType":"document","content":[{"nodeType":"hyperlink","data":{"uri":""},"content":[{"nodeType":"text","value":"link"}]}]}
+            """)!;
+        document["content"]![0]!["data"]!["uri"] = destination;
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => MapRichTextPageAsync(document.ToJsonString()));
+    }
+
+    [Fact]
+    public async Task UnsupportedRichTextDoesNotSilentlyDisappear()
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => MapRichTextPageAsync("""
+            {"nodeType":"document","content":[{"nodeType":"embedded-entry-block","content":[]}]}
+            """));
+    }
+
+    [Fact]
+    public async Task RichTextPreservesHeadingsMarksLinksAndNestedLists()
+    {
+        var page = await MapRichTextPageAsync("""
+            {"nodeType":"document","content":[
+              {"nodeType":"heading-2","content":[{"nodeType":"text","value":"How children learn","marks":[]}]},
+              {"nodeType":"paragraph","content":[
+                {"nodeType":"text","value":"Read *literally* ","marks":[]},
+                {"nodeType":"text","value":"carefully","marks":[{"type":"bold"},{"type":"italic"}]},
+                {"nodeType":"text","value":" and ","marks":[]},
+                {"nodeType":"hyperlink","data":{"uri":"https://example.test/guide?q=one&next=two"},"content":[{"nodeType":"text","value":"this guide","marks":[]}]}
+              ]},
+              {"nodeType":"unordered-list","content":[
+                {"nodeType":"list-item","content":[
+                  {"nodeType":"paragraph","content":[{"nodeType":"text","value":"First topic","marks":[]}]},
+                  {"nodeType":"ordered-list","content":[{"nodeType":"list-item","content":[{"nodeType":"paragraph","content":[{"nodeType":"text","value":"Nested topic","marks":[]}]}]}]}
+                ]}
+              ]}
+            ]}
+            """);
+
+        var html = new TrainingContentRenderer().Render(page.Body).Value!;
+        Assert.Contains("<h2>How children learn</h2>", html);
+        Assert.Contains("Read *literally*", html);
+        Assert.Contains("<em><strong>carefully</strong></em>", html);
+        Assert.Contains("href=\"https://example.test/guide?q=one&amp;next=two\"", html);
+        Assert.Contains("<ul>", html);
+        Assert.Contains("<ol>", html);
+        Assert.Contains("Nested topic", html);
+    }
+
+    [Fact]
+    public async Task RichTextResolvesLocalizedLinkedImagesWithDescriptionAsAlternativeText()
+    {
+        var page = await MapRichTextPageAsync("""
+            {"nodeType":"document","content":[
+              {"nodeType":"embedded-asset-block","data":{"target":{"sys":{"id":"brain-image","type":"Link","linkType":"Asset"}}},"content":[]}
+            ]}
+            """, """
+            [{"sys":{"id":"brain-image","type":"Asset"},"fields":{
+              "description":{"en-US":"Diagram of a child's brain"},
+              "title":{"en-US":"Brain"},
+              "file":{"en-US":{"url":"//images.ctfassets.net/space/brain.png","contentType":"image/png"}}
+            }}]
+            """);
+
+        var html = new TrainingContentRenderer().Render(page.Body).Value!;
+        Assert.Contains("<img", html);
+        Assert.Contains("src=\"https://images.ctfassets.net/space/brain.png\"", html);
+        Assert.Contains("alt=\"Diagram of a child's brain\"", html);
+    }
+
+    [Theory]
+    [InlineData("missing-image", "[]")]
+    [InlineData("brain-image", """[{"sys":{"id":"brain-image","type":"Asset"},"fields":{"file":{"url":"javascript:alert(1)","contentType":"image/png"}}}]""")]
+    [InlineData("brain-image", """[{"sys":{"id":"brain-image","type":"Asset"},"fields":{"file":{"url":"https://example.test/document.pdf","contentType":"application/pdf"}}}]""")]
+    public async Task BrokenOrInvalidEmbeddedImagesRaiseAnExplicitContentError(string id, string assets)
+    {
+        var body = """
+            {"nodeType":"document","content":[
+              {"nodeType":"embedded-asset-block","data":{"target":{"sys":{"id":"ASSET_ID","type":"Link","linkType":"Asset"}}},"content":[]}
+            ]}
+            """.Replace("ASSET_ID", id, StringComparison.Ordinal);
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => MapRichTextPageAsync(body, assets));
+    }
+
+    private static async Task<EarlyYearsFoundationRecovery.Application.Contracts.TrainingPage> MapRichTextPageAsync(
+        string body,
+        string assets = "[]")
+    {
+        var response = JsonNode.Parse(VideoResponse)!;
+        var fields = response["includes"]!["Entry"]![0]!["fields"]!;
+        response["includes"]!["Entry"]![0]!["sys"]!["contentType"]!["sys"]!["id"] = "page";
+        fields["body"] = JsonNode.Parse(body);
+        response["includes"]!["Asset"] = JsonNode.Parse(assets);
+        return await MapPageResponseAsync(response.ToJsonString());
+    }
+
     [Theory]
     [InlineData("youtube", "XnP6jaK7ZAY", "https://www.youtube.com/embed/XnP6jaK7ZAY")]
     [InlineData("YouTube", "XnP6jaK7ZAY", "https://www.youtube.com/embed/XnP6jaK7ZAY")]
@@ -51,6 +229,14 @@ public sealed class ContentfulTrainingContentProviderTests
         var response = VideoResponse
             .Replace("VIDEO_PROVIDER", provider, StringComparison.Ordinal)
             .Replace("VIDEO_ID", id, StringComparison.Ordinal);
+        return await MapPageResponseAsync(response);
+    }
+
+    private static async Task<TrainingPage> MapPageResponseAsync(string response) =>
+        Assert.Single((await MapModuleResponseAsync(response)).Pages);
+
+    private static async Task<TrainingModule> MapModuleResponseAsync(string response)
+    {
         using var httpClient = new HttpClient(new StubHttpMessageHandler(response));
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var configuration = new ConfigurationBuilder()
@@ -62,7 +248,7 @@ public sealed class ContentfulTrainingContentProviderTests
             .Build();
         var client = new ContentfulDeliveryClient(httpClient, configuration, cache);
         var modules = await new ContentfulTrainingContentProvider(client).GetModulesAsync(CancellationToken.None);
-        return Assert.Single(Assert.Single(modules).Pages);
+        return Assert.Single(modules);
     }
 
     private const string VideoResponse = """
@@ -113,6 +299,7 @@ public sealed class ContentfulTrainingContentProviderTests
         var question = Assert.Single(module.Pages);
 
         Assert.Equal("module-one", module.Name);
+        Assert.Equal("- Understand child development", module.Criteria);
         Assert.False(module.IsDraft);
         Assert.Equal("summative", question.PageType);
         Assert.Equal("Which answer is correct?", question.Body);
@@ -134,6 +321,7 @@ public sealed class ContentfulTrainingContentProviderTests
               "fields": {
                 "name": { "en-US": "module-one" },
                 "title": { "en-US": "Module one" },
+                "criteria": { "en-US": "- Understand child development" },
                 "position": { "en-US": 1 },
                 "pages": { "en-US": [{ "sys": { "type": "Link", "linkType": "Entry", "id": "question-one" } }] }
               }

@@ -51,10 +51,15 @@ public sealed class ContentfulDeliveryClient(
             entries.AddRange(items.EnumerateArray().Select(entry => entry.Clone()));
         }
 
-        if (document.RootElement.TryGetProperty("includes", out var includes) &&
-            includes.TryGetProperty("Entry", out var includedEntries))
+        if (document.RootElement.TryGetProperty("includes", out var includes))
         {
-            entries.AddRange(includedEntries.EnumerateArray().Select(entry => entry.Clone()));
+            foreach (var kind in new[] { "Entry", "Asset" })
+            {
+                if (includes.TryGetProperty(kind, out var included))
+                {
+                    entries.AddRange(included.EnumerateArray().Select(entry => entry.Clone()));
+                }
+            }
         }
 
         var result = entries.ToArray();
@@ -79,13 +84,13 @@ public sealed class ContentfulDeliveryClient(
             : value;
     }
 
-    public static string StringField(JsonElement fields, string name)
+    public static string StringField(JsonElement fields, string name, IReadOnlyList<JsonElement>? entries = null)
     {
         var value = Field(fields, name);
-        return StringOrRichText(value).Trim();
+        return StringOrRichText(value, entries).Trim();
     }
 
-    public static string StringOrRichText(JsonElement value)
+    public static string StringOrRichText(JsonElement value, IReadOnlyList<JsonElement>? entries = null)
     {
         if (value.ValueKind == JsonValueKind.String)
         {
@@ -94,7 +99,7 @@ public sealed class ContentfulDeliveryClient(
 
         if (value.ValueKind == JsonValueKind.Array)
         {
-            return string.Concat(value.EnumerateArray().Select(StringOrRichText));
+            return string.Concat(value.EnumerateArray().Select(item => StringOrRichText(item, entries)));
         }
 
         if (value.ValueKind != JsonValueKind.Object)
@@ -102,19 +107,9 @@ public sealed class ContentfulDeliveryClient(
             return string.Empty;
         }
 
-        var text = value.TryGetProperty("value", out var textValue) &&
-                   textValue.ValueKind == JsonValueKind.String
-            ? textValue.GetString()
-            : null;
-        var children = value.TryGetProperty("content", out var content)
-            ? StringOrRichText(content)
+        return value.TryGetProperty("nodeType", out _)
+            ? ContentfulRichText.ToMarkdown(value, entries ?? [])
             : string.Empty;
-        var nodeType = value.TryGetProperty("nodeType", out var type) ? type.GetString() : null;
-        var separator = nodeType is "paragraph" or "heading-1" or "heading-2" or "heading-3" or
-            "heading-4" or "heading-5" or "heading-6" or "list-item" or "blockquote"
-            ? Environment.NewLine
-            : string.Empty;
-        return string.Concat(text, children, separator);
     }
 
     public static bool BooleanField(JsonElement fields, string name)

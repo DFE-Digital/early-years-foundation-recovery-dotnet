@@ -22,6 +22,8 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddScoped<TrainingContentRenderer>();
+builder.Services.AddScoped<CertificateRenderer>();
+builder.Services.AddScoped<ICertificatePdfRenderer>(services => services.GetRequiredService<CertificateRenderer>());
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));

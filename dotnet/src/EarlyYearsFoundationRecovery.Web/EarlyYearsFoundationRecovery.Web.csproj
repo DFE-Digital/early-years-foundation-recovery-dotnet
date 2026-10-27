@@ -13,6 +13,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.Playwright" Version="1.64.1" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -21,5 +22,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>1aedd72f-76a5-450e-8502-ea364dd2b740</UserSecretsId>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../../app/assets/images/department-for-education-certificate.png"
+                      LogicalName="EarlyYearsFoundationRecovery.Web.CertificateLogo.png" />
+  </ItemGroup>
 
 </Project>

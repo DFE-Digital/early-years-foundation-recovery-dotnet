@@ -35,6 +35,12 @@ public sealed class TrainingJourneyService(
     public async Task<TrainingModule?> GetModuleAsync(string moduleName, CancellationToken cancellationToken) =>
         await content.GetModuleAsync(moduleName, cancellationToken);
 
+    public async Task<DateTimeOffset?> GetCompletionDateAsync(
+        UserAccount account,
+        string moduleName,
+        CancellationToken cancellationToken) =>
+        (await progress.FindAsync(account.Id, moduleName, cancellationToken))?.CompletedAt;
+
     public async Task RecordPageViewAsync(
         UserAccount account,
         string moduleName,

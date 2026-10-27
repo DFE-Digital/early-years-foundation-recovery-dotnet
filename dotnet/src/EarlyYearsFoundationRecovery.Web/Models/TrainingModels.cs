@@ -2,8 +2,11 @@ using System.ComponentModel.DataAnnotations;
 using EarlyYearsFoundationRecovery.Application.Contracts;
 using EarlyYearsFoundationRecovery.Application.Training;
 using EarlyYearsFoundationRecovery.Domain.Training;
+using EarlyYearsFoundationRecovery.Web.Content;
 
 namespace EarlyYearsFoundationRecovery.Web.Models;
+
+public sealed record CertificateViewModel(string ModuleName, CertificateData Certificate);
 
 public sealed record TrainingModuleViewModel(TrainingModule Module, string State, int VisitedPageCount);
 

@@ -30,7 +30,7 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
         var position = IntegerField(fields, "position");
         var pages = ResolveReferences(ContentfulDeliveryClient.Field(fields, "pages"), entries)
             .Where(item => ContentfulDeliveryClient.ContentType(item) is "page" or "question" or "video")
-            .Select(MapPage)
+            .Select(page => MapPage(page, entries))
             .Where(page => !string.IsNullOrWhiteSpace(page.Name))
             .ToArray();
         if (!pages.Any(page => page.PageType == "pre_confidence"))
@@ -51,10 +51,11 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
                       string.IsNullOrWhiteSpace(title) ||
                       pages.Length == 0;
 
-        return new TrainingModule(name, title, position, isDraft, pages);
+        return new TrainingModule(name, title, position, isDraft, pages,
+            ContentfulDeliveryClient.StringField(fields, "criteria", entries));
     }
 
-    private static TrainingPage MapPage(JsonElement entry)
+    private static TrainingPage MapPage(JsonElement entry, IReadOnlyList<JsonElement> entries)
     {
         var fields = ContentfulDeliveryClient.Fields(entry);
         var contentType = ContentfulDeliveryClient.ContentType(entry);
@@ -99,15 +100,15 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
             name,
             ContentfulDeliveryClient.StringField(fields, "heading") is { Length: > 0 } heading ? heading : name,
             pageType.Length > 0 ? pageType : contentType,
-            ContentfulDeliveryClient.StringField(fields, "body"),
+            ContentfulDeliveryClient.StringField(fields, "body", entries),
             options,
             correctAnswers,
             contentType == "question" ? pageType : null,
             (pageType is "formative" or "summative") && correctAnswers.Length > 1,
-            contentType == "video" ? MapVideo(fields) : null);
+            contentType == "video" ? MapVideo(fields, entries) : null);
     }
 
-    private static TrainingVideo MapVideo(JsonElement fields)
+    private static TrainingVideo MapVideo(JsonElement fields, IReadOnlyList<JsonElement> entries)
     {
         var id = ContentfulDeliveryClient.StringField(fields, "video_id");
         string? embedUrl = null;
@@ -130,7 +131,7 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
         return new TrainingVideo(
             embedUrl,
             ContentfulDeliveryClient.StringField(fields, "title"),
-            ContentfulDeliveryClient.StringField(fields, "transcript"));
+            ContentfulDeliveryClient.StringField(fields, "transcript", entries));
     }
 
     private static IEnumerable<JsonElement> ResolveReferences(

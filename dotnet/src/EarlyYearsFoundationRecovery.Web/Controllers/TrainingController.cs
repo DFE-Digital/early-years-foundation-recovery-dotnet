@@ -3,6 +3,7 @@ using EarlyYearsFoundationRecovery.Application.Accounts;
 using EarlyYearsFoundationRecovery.Application.Training;
 using EarlyYearsFoundationRecovery.Domain.Accounts;
 using EarlyYearsFoundationRecovery.Web.Models;
+using EarlyYearsFoundationRecovery.Web.Content;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +13,8 @@ namespace EarlyYearsFoundationRecovery.Web.Controllers;
 [Route("training")]
 public sealed class TrainingController(
     AccountService accounts,
-    TrainingJourneyService training) : Controller
+    TrainingJourneyService training,
+    ICertificatePdfRenderer certificatePdf) : Controller
 {
     [HttpGet("")]
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -102,13 +104,7 @@ public sealed class TrainingController(
 
         if (page.PageType == "certificate")
         {
-            var listing = (await training.GetModulesAsync(account, cancellationToken))
-                .Single(item => item.Module.Name == moduleName);
-            if (listing.State != "completed")
-            {
-                TempData["TrainingNotice"] = "Complete this module before viewing your certificate.";
-                return RedirectToAction(nameof(Module), new { moduleName });
-            }
+            return RedirectToAction(nameof(Certificate), new { moduleName });
         }
 
         await training.RecordPageViewAsync(account, moduleName, pageName, cancellationToken);
@@ -125,6 +121,48 @@ public sealed class TrainingController(
         {
             SelectedAnswerIds = selectedAnswers
         });
+    }
+
+    [HttpGet("{moduleName}/certificate")]
+    [HttpGet("{moduleName}/certificate.pdf")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> Certificate(string moduleName, CancellationToken cancellationToken)
+    {
+        var account = await CurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+
+        var module = await training.GetModuleAsync(moduleName, cancellationToken);
+        if (module is null || module.IsDraft || !module.Pages.Any(page => page.PageType == "certificate"))
+        {
+            return NotFound();
+        }
+
+        var completedAt = await training.GetCompletionDateAsync(account, moduleName, cancellationToken);
+        if (completedAt is null)
+        {
+            TempData["TrainingNotice"] = "Complete this module before viewing your certificate.";
+            return RedirectToAction(nameof(Module), new { moduleName });
+        }
+
+        var certificate = new CertificateData(
+            $"{account.FirstName} {account.LastName}", module.Title, module.Criteria, completedAt.Value);
+        if (Request.Path.Value?.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            var pdf = await certificatePdf.GenerateAsync(certificate, cancellationToken);
+            return File(pdf, "application/pdf", "certificate-of-achievement.pdf");
+        }
+
+        var certificatePage = module.Pages.First(page => page.PageType == "certificate");
+        await training.RecordPageViewAsync(account, moduleName, certificatePage.Name, cancellationToken);
+        return View(new CertificateViewModel(moduleName, certificate));
     }
 
     [HttpPost("{moduleName}/questions/{questionName}")]

@@ -51,6 +51,17 @@ summary:focus {
   margin-block: 24px;
 }
 
+.certificate-award {
+  border-top: 6px solid #1d70b8;
+  padding: 24px;
+  margin-block: 32px;
+}
+
+.certificate-award h1,
+.certificate-award h2 {
+  overflow-wrap: anywhere;
+}
+
 .video-transcript summary {
   color: #1d70b8;
   cursor: pointer;
@@ -315,6 +326,52 @@ h2 {
   margin-bottom: 32px;
 }
 
+.content-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.training-columns {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+.training-columns > div {
+  min-width: 0;
+}
+
+.training-prompt {
+  border-left: 6px solid #1d70b8;
+  padding: 20px;
+  margin-block: 28px;
+  overflow-wrap: anywhere;
+}
+
+.training-prompt--brain {
+  background: #f3f2f1;
+}
+
+.training-prompt h2 {
+  margin-top: 0;
+}
+
+.training-prompt > :last-child {
+  margin-bottom: 0;
+}
+
+.training-quote {
+  margin: 28px 0;
+  padding: 4px 24px;
+  border-left: 6px solid #b1b4b6;
+}
+
+.training-quote cite {
+  display: block;
+  margin-block: 16px;
+}
+
 .notification {
   max-width: 760px;
   margin: 24px 0;
@@ -348,6 +405,10 @@ h2 {
 }
 
 @media (max-width: 640px) {
+  .training-columns {
+    grid-template-columns: 1fr;
+  }
+
   .header-content,
   .service-name {
     align-items: flex-start;
