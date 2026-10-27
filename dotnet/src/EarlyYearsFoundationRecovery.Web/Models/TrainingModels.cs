@@ -71,6 +71,20 @@ public sealed record AssessmentResultViewModel(
 
 public sealed record AssessmentSummaryViewModel(TrainingModule Module, AssessmentAttempt Assessment)
 {
+    public IReadOnlyList<IncorrectAnswerViewModel> IncorrectAnswers =>
+        Assessment.CompletedAt is null
+            ? []
+            : Module.Pages
+                .Where(page => page.PageType == "summative")
+                .Select(page => (Question: page, Answer: Assessment.Answers.SingleOrDefault(answer =>
+                    answer.QuestionName == page.Name && !answer.IsCorrect)))
+                .Where(item => item.Answer is not null)
+                .Select(item => new IncorrectAnswerViewModel(item.Question,
+                    item.Answer!.SelectedAnswerIds.Select(id =>
+                        item.Question.Options?.SingleOrDefault(option => option.Id == id)?.Label
+                        ?? "This answer is no longer available in the module content.").ToArray()))
+                .ToArray();
+
     public TrainingPage? NextPage
     {
         get
@@ -88,3 +102,5 @@ public sealed record AssessmentSummaryViewModel(TrainingModule Module, Assessmen
 
     public TrainingPage? FirstQuestion => Module.Pages.FirstOrDefault(page => page.PageType == "summative");
 }
+
+public sealed record IncorrectAnswerViewModel(TrainingPage Question, IReadOnlyList<string> SelectedAnswers);

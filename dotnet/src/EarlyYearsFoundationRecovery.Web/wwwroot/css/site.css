@@ -372,6 +372,45 @@ h2 {
   margin-block: 16px;
 }
 
+.assessment-review {
+  border-bottom: 1px solid #b1b4b6;
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+.training-inset-text,
+.training-details__text {
+  border-left: 5px solid #b1b4b6;
+  padding: 16px 20px;
+  overflow-wrap: anywhere;
+}
+
+.training-inset-text,
+.training-details {
+  margin-block: 28px;
+}
+
+.training-details summary {
+  color: #1d70b8;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.training-details__text {
+  margin-top: 16px;
+}
+
+.training-inset-text > :first-child,
+.training-details__text > :first-child {
+  margin-top: 0;
+}
+
+.training-inset-text > :last-child,
+.training-details__text > :last-child {
+  margin-bottom: 0;
+}
+
 .notification {
   max-width: 760px;
   margin: 24px 0;

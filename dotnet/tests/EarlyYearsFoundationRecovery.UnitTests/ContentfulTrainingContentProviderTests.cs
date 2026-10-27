@@ -12,6 +12,22 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class ContentfulTrainingContentProviderTests
 {
     [Fact]
+    public async Task MapsRichTextAssessmentFeedbackThroughTheSameSanitizedPipeline()
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        response["includes"]!["Entry"]![0]!["fields"]!["failure_message"] = JsonNode.Parse("""
+            {"en-US":{"nodeType":"document","content":[
+              {"nodeType":"paragraph","content":[{"nodeType":"text","value":"Try observing individual needs.","marks":[{"type":"bold"}]}]}
+            ]}}
+            """);
+
+        var question = await MapPageResponseAsync(response.ToJsonString());
+
+        Assert.Contains("<strong>Try observing individual needs.</strong>",
+            new TrainingContentRenderer().Render(question.FailureMessage).Value!);
+    }
+
+    [Fact]
     public async Task RichTextIsUsedForCertificateCriteriaAndVideoTranscriptsToo()
     {
         const string richText = """
@@ -303,6 +319,7 @@ public sealed class ContentfulTrainingContentProviderTests
         Assert.False(module.IsDraft);
         Assert.Equal("summative", question.PageType);
         Assert.Equal("Which answer is correct?", question.Body);
+        Assert.Equal("Read [the topic](/training/module-one/content/topic) again.", question.FailureMessage);
         Assert.Equal(["2"], question.CorrectAnswerIds);
         Assert.Equal("Yes", question.Options![1].Label);
         Assert.True(question.AllowsMultipleAnswers is false);
@@ -346,7 +363,8 @@ public sealed class ContentfulTrainingContentProviderTests
                       ]
                     }
                   },
-                  "answers": { "en-US": [["No", false], ["Yes", true]] }
+                  "answers": { "en-US": [["No", false], ["Yes", true]] },
+                  "failure_message": { "en-US": "Read [the topic](/training/module-one/content/topic) again." }
                 }
               }
             ]

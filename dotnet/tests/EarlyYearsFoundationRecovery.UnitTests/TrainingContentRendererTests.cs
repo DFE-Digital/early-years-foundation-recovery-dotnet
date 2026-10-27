@@ -1,10 +1,161 @@
 using EarlyYearsFoundationRecovery.Web.Content;
+using Microsoft.Playwright;
 
 namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class TrainingContentRendererTests
 {
     private readonly TrainingContentRenderer _renderer = new();
+
+    [Fact]
+    public void RendersInsetTextWithNestedMarkdown()
+    {
+        var html = _renderer.Render("""
+            {inset-text}
+            Important **guidance**.
+
+            - First point
+            - Second point
+            {/inset-text}
+            """).Value!;
+
+        Assert.Contains("<div class=\"training-inset-text\">", html);
+        Assert.Contains("<strong>guidance</strong>", html);
+        Assert.Contains("<li>First point</li>", html);
+        Assert.DoesNotContain("{inset-text}", html);
+    }
+
+    [Theory]
+    [InlineData("Why does this matter? Read **more**.", "Why does this matter?")]
+    [InlineData("More information. Read **more**.", "More information")]
+    public void DetailsUsesFirstQuestionMarkOrFullStopAsSummaryBoundary(string content, string summary)
+    {
+        var html = _renderer.Render($"{{details}}{content}{{/details}}").Value!;
+
+        Assert.Contains("<details class=\"training-details\">", html);
+        Assert.Contains($"<summary>{summary}</summary>", html);
+        Assert.Contains("<strong>more</strong>", html);
+        Assert.DoesNotContain(" open", html);
+        Assert.DoesNotContain("{details}", html);
+    }
+
+    [Fact]
+    public void DetailsCanContainInsetTextAndLists()
+    {
+        var html = _renderer.Render("""
+            {details}
+            What should I do?
+
+            - Observe
+            - Reflect
+
+            {inset-text}
+            Keep **notes**.
+            {/inset-text}
+            {/details}
+            """).Value!;
+
+        Assert.Contains("<summary>What should I do?</summary>", html);
+        Assert.Contains("<li>Observe</li>", html);
+        Assert.Contains("class=\"training-inset-text\"", html);
+        Assert.Contains("<strong>notes</strong>", html);
+    }
+
+    [Theory]
+    [InlineData("{details}Missing punctuation and body{/details}")]
+    [InlineData("{details}Summary only?{/details}")]
+    [InlineData("{details}Unclosed? Body")]
+    [InlineData("{/details}")]
+    [InlineData("{inset-text}Unclosed")]
+    [InlineData("{inset-text}{/inset-text}")]
+    [InlineData("{/inset-text}")]
+    public void MalformedInsetTextAndDetailsRaiseExplicitContentErrors(string markdown)
+    {
+        Assert.Throws<InvalidDataException>(() => _renderer.Render(markdown));
+    }
+
+    [Fact]
+    public void DetailsAndInsetMarkersInsideCodeOrEscapedTextRemainLiteral()
+    {
+        var html = _renderer.Render("""
+            `{details}Summary? Body{/details}`
+
+            ```text
+            {inset-text}Literal{/inset-text}
+            ```
+
+            \{details}
+
+            \{inset-text}
+            """).Value!;
+
+        Assert.Contains("{details}", html);
+        Assert.Contains("{inset-text}", html);
+        Assert.DoesNotContain("<details", html);
+        Assert.DoesNotContain("class=\"training-inset-text\"", html);
+    }
+
+    [Fact]
+    public void DetailsSummaryAndBodyDoNotEnableRawHtmlOrUnsafeLinks()
+    {
+        var html = _renderer.Render("""
+            {details}
+            <img src=x onerror=alert(1)>?
+
+            <script>alert(1)</script>
+
+            [Unsafe](javascript:alert%281%29)
+            {/details}
+            """).Value!;
+
+        Assert.Contains("<summary>", html);
+        Assert.DoesNotContain("<img", html);
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("href=", html);
+    }
+
+    [Fact]
+    public void DetailsPreservesSummaryFormattingAndNestedDetails()
+    {
+        var html = _renderer.Render("""
+            {details}
+            **More** information?
+
+            Outer content.
+
+            {details}Another question? Inner content.{/details}
+            {/details}
+            """).Value!;
+
+        Assert.Contains("<summary><strong>More</strong> information?</summary>", html);
+        Assert.Contains("<summary>Another question?</summary>", html);
+        Assert.Contains("Inner content.", html);
+        Assert.DoesNotContain("{details}", html);
+    }
+
+    [Fact]
+    public async Task RenderedDetailsOpensAndClosesWithKeyboardWithoutJavaScript()
+    {
+        using var playwright = await Playwright.CreateAsync();
+        await using var browser = await playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
+        await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
+        {
+            JavaScriptEnabled = false,
+            ViewportSize = new ViewportSize { Width = 375, Height = 812 }
+        });
+        var page = await context.NewPageAsync();
+        await page.SetContentAsync(_renderer.Render("{details}More information? Hidden guidance.{/details}").Value!);
+        var summary = page.Locator("summary");
+        var body = page.Locator(".training-details__text");
+
+        Assert.False(await body.IsVisibleAsync());
+        await summary.FocusAsync();
+        await page.Keyboard.PressAsync("Enter");
+        Assert.True(await body.IsVisibleAsync());
+        Assert.Equal("Hidden guidance.", (await body.InnerTextAsync()).Trim());
+        await page.Keyboard.PressAsync("Space");
+        Assert.False(await body.IsVisibleAsync());
+    }
 
     [Theory]
     [InlineData("brain", "Reflection point")]

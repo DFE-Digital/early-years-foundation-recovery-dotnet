@@ -17,7 +17,8 @@ public sealed record TrainingPage(
     IReadOnlyList<string>? CorrectAnswerIds = null,
     string? QuestionType = null,
     bool AllowsMultipleAnswers = false,
-    TrainingVideo? Video = null);
+    TrainingVideo? Video = null,
+    string FailureMessage = "");
 
 public sealed record TrainingVideo(string? EmbedUrl, string Title, string Transcript);
 

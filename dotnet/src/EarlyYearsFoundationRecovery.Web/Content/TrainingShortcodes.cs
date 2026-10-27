@@ -11,8 +11,9 @@ namespace EarlyYearsFoundationRecovery.Web.Content;
 internal sealed partial class TrainingShortcodes(string kind) : ContainerBlock(null)
 {
     public string Kind { get; } = kind;
+    public ParagraphBlock? Summary { get; private set; }
 
-    [GeneratedRegex(@"\{/?(?:brain|book|info|quote|two_thirds)\}")]
+    [GeneratedRegex(@"\{/?(?:brain|book|info|quote|two_thirds|inset-text|details)\}")]
     private static partial Regex BlockMarker();
 
     public static string SeparateMarkers(string source, MarkdownDocument document)
@@ -36,11 +37,11 @@ internal sealed partial class TrainingShortcodes(string kind) : ContainerBlock(n
         for (var index = 0; index < container.Count; index++)
         {
             var marker = TrainingColumnsLayout.Marker(container[index], source);
-            if (marker is "{/brain}" or "{/book}" or "{/info}" or "{/quote}")
+            if (marker is "{/brain}" or "{/book}" or "{/info}" or "{/quote}" or "{/inset-text}" or "{/details}")
             {
                 throw new InvalidDataException($"Contentful shortcode '{marker}' has no opening marker.");
             }
-            if (marker is not ("{brain}" or "{book}" or "{info}" or "{quote}"))
+            if (marker is not ("{brain}" or "{book}" or "{info}" or "{quote}" or "{inset-text}" or "{details}"))
             {
                 if (container[index] is ContainerBlock nested)
                 {
@@ -83,8 +84,58 @@ internal sealed partial class TrainingShortcodes(string kind) : ContainerBlock(n
                 shortcode.Add(block);
             }
             Apply(shortcode, source);
+            if (kind == "details")
+            {
+                shortcode.ExtractSummary();
+            }
             container.Insert(index, shortcode);
         }
+    }
+
+    private void ExtractSummary()
+    {
+        if (this[0] is not ParagraphBlock { Inline: { } inline } paragraph)
+        {
+            throw new InvalidDataException("Contentful details must start with a summary ending in '?' or '.'.");
+        }
+        var summary = new ParagraphBlock(null) { Inline = new ContainerInline() };
+        var boundaryFound = false;
+        foreach (var child in inline.ToArray())
+        {
+            if (child is LiteralInline literal && literal.Content.ToString().IndexOfAny(['?', '.']) is var position && position >= 0)
+            {
+                var text = literal.Content.ToString();
+                var end = position + (text[position] == '?' ? 1 : 0);
+                summary.Inline.AppendChild(new LiteralInline(text[..end].TrimEnd()));
+                literal.Content = new Markdig.Helpers.StringSlice(text[(position + 1)..].TrimStart());
+                if (literal.Content.IsEmpty)
+                {
+                    literal.Remove();
+                }
+                boundaryFound = true;
+                break;
+            }
+            child.Remove();
+            summary.Inline.AppendChild(child);
+        }
+        if (!boundaryFound || summary.Inline.FirstChild is null ||
+            summary.Inline.FirstChild is LiteralInline { NextSibling: null } only && string.IsNullOrWhiteSpace(only.Content.ToString()))
+        {
+            throw new InvalidDataException("Contentful details require a non-empty summary ending in '?' or '.'.");
+        }
+        if (inline.FirstChild is LineBreakInline lineBreak)
+        {
+            lineBreak.Remove();
+        }
+        if (inline.FirstChild is null)
+        {
+            Remove(paragraph);
+        }
+        if (Count == 0)
+        {
+            throw new InvalidDataException("Contentful details require content after their summary.");
+        }
+        Summary = summary;
     }
 
     public static void ApplyLinks(MarkdownDocument document, string source)
@@ -152,6 +203,24 @@ internal sealed partial class TrainingShortcodes(string kind) : ContainerBlock(n
     {
         protected override void Write(HtmlRenderer renderer, TrainingShortcodes block)
         {
+            if (block.Kind == "inset-text")
+            {
+                renderer.WriteLine("<div class=\"training-inset-text\">");
+                renderer.WriteChildren(block);
+                renderer.WriteLine("</div>");
+                return;
+            }
+            if (block.Kind == "details")
+            {
+                renderer.WriteLine("<details class=\"training-details\">");
+                renderer.Write("<summary>");
+                renderer.WriteLeafInline(block.Summary ?? throw new InvalidDataException("Contentful details summary is missing."));
+                renderer.WriteLine("</summary>");
+                renderer.WriteLine("<div class=\"training-details__text\">");
+                renderer.WriteChildren(block);
+                renderer.WriteLine("</div></details>");
+                return;
+            }
             if (block.Kind == "quote")
             {
                 renderer.WriteLine("<blockquote class=\"training-quote\">");

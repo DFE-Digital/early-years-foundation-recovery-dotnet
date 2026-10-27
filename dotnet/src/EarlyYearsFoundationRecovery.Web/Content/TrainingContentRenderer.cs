@@ -40,7 +40,7 @@ public sealed class TrainingContentRenderer
             "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li",
             "strong", "em", "b", "i", "blockquote", "cite", "img", "br", "hr",
             "table", "thead", "tbody", "tfoot", "tr", "th", "td", "code", "pre",
-            "span", "div", "dl", "dt", "dd", "section"
+            "span", "div", "dl", "dt", "dd", "section", "details", "summary"
         ]);
         sanitizer.AllowedAttributes.Clear();
         sanitizer.AllowedAttributes.UnionWith(

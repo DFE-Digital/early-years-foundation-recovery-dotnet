@@ -1,12 +1,36 @@
 @model EarlyYearsFoundationRecovery.Web.Models.AssessmentSummaryViewModel
+@inject EarlyYearsFoundationRecovery.Web.Content.TrainingContentRenderer ContentRenderer
 @{
     ViewData["Title"] = "Assessment result";
+    var incorrectAnswers = Model.IncorrectAnswers;
 }
 <h1>Assessment result</h1>
 <div class="notification @(Model.Assessment.Passed == true ? "notification--success" : "notification--info")" role="status">
     <p>Your assessment score is @Model.Assessment.Score%.</p>
     <p>@(Model.Assessment.Passed == true ? "You passed the assessment." : "You did not pass. You can try again.")</p>
 </div>
+@if (incorrectAnswers.Count > 0)
+{
+    <h2>Review your incorrect answers</h2>
+    @foreach (var review in incorrectAnswers)
+    {
+        <section class="assessment-review">
+            <h3>@review.Question.Title</h3>
+            <div class="content-body">@ContentRenderer.Render(review.Question.Body)</div>
+            <p>You selected:</p>
+            <ul>
+                @foreach (var answer in review.SelectedAnswers)
+                {
+                    <li>@answer</li>
+                }
+            </ul>
+            @if (!string.IsNullOrWhiteSpace(review.Question.FailureMessage))
+            {
+                <div class="training-inset-text content-body">@ContentRenderer.Render(review.Question.FailureMessage)</div>
+            }
+        </section>
+    }
+}
 @if (Model.Assessment.Passed == true)
 {
     @if (Model.NextPage is not null)
