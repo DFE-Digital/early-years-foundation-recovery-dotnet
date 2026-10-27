@@ -16,6 +16,27 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Fact]
+    public async Task ModuleListingRetainsRecordedCompletionDateWithoutWritingProgress()
+    {
+        var module = ConfidenceModule("summative");
+        var progress = new InMemoryProgressStore();
+        var account = new UserAccount("subject-1", "person@example.test");
+        var saved = new TrainingModuleProgress(account.Id, module.Name);
+        var completedAt = DateTimeOffset.Parse("2026-01-02T10:30:00Z");
+        saved.RecordCompletion(completedAt);
+        await progress.AddAsync(saved, CancellationToken.None);
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+
+        var listing = Assert.Single(await service.GetModulesAsync(account, CancellationToken.None));
+
+        Assert.Equal("completed", listing.State);
+        Assert.Equal(completedAt, listing.CompletedAt);
+        Assert.Equal(completedAt, saved.CompletedAt);
+        Assert.Equal(0, saved.VisitedPageCount);
+    }
+
+    [Fact]
     public async Task OverviewReceivesActualVisitedPageNamesNotOnlyTotalCount()
     {
         var controller = ConfidenceController("formative");
@@ -95,6 +116,7 @@ public sealed class TrainingJourneyServiceTests
         Assert.Equal(1, saved.VisitedPageCount);
         var listing = Assert.Single(await service.GetModulesAsync(account, CancellationToken.None));
         Assert.Equal(starts ? "in-progress" : "available", listing.State);
+        Assert.Null(listing.CompletedAt);
     }
 
     [Fact]
@@ -331,6 +353,10 @@ public sealed class TrainingJourneyServiceTests
         Assert.Equal("Alex Example", model.Certificate.LearnerName);
         Assert.Equal(module.Criteria, model.Certificate.Criteria);
         Assert.Equal(module.Title, model.Certificate.ModuleTitle);
+        var listingResult = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        var listing = Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(listingResult.Model));
+        Assert.Equal("completed", listing.State);
+        Assert.Equal(model.Certificate.CompletedAt, listing.CompletedAt);
 
         controller.Request.Path = "/training/module-one/certificate.pdf";
         var download = Assert.IsType<FileContentResult>(await controller.Certificate(module.Name, CancellationToken.None));

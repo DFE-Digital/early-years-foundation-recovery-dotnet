@@ -7,7 +7,7 @@ namespace EarlyYearsFoundationRecovery.Web.Content;
 
 public sealed record CertificateData(string LearnerName, string ModuleTitle, string Criteria, DateTimeOffset CompletedAt)
 {
-    public string CompletionDate => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(CompletedAt, "Europe/London")
+    public string CompletionDate => TrainingDateFormatter.ToUkDate(CompletedAt)
         .ToString("d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"));
 }
 

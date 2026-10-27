@@ -36,7 +36,10 @@ public sealed class TrainingController(
             .Select(item => new TrainingModuleViewModel(
                 item.Module,
                 item.State,
-                item.VisitedPageCount))
+                item.VisitedPageCount)
+            {
+                CompletedAt = item.CompletedAt
+            })
             .ToArray());
     }
 

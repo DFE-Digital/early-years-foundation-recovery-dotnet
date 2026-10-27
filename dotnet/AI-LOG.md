@@ -279,6 +279,72 @@ verification; no push was requested.
 checks passed. Includes the preceding overview slice and checkpoint-number log
 formatting. Next: group My modules by learning state.
 
+### Checkpoint 10: My modules learning-state groups
+
+**User objective:** continue with grouped course-list presentation.
+
+Replaced the flat module list with in-progress, available and completed sections,
+ordered by content position within each group. Added new/returning learner empty
+guidance and an all-completed message, while preserving the explicit no-content
+message. Section headings are labelled regions and module headings are level
+three. Overview links, recorded page counts and persisted lifecycle state are
+unchanged.
+
+**Red before green:** four of the first five actual-Razor cases failed on the
+flat list. Added two further cases for returning learners and encoded titles/
+overview links. A new test initially expected the wrong fixture slug; corrected
+that expectation. The full Release suite passed **210 tests**. Editor diagnostics
+and whitespace checks passed.
+
+**Manual evidence:** the authenticated local learner's list showed one in-progress,
+six available and one completed module, with eight overview links and no horizontal
+overflow at 375px. App/database health remained healthy after restart. Viewed the
+list only; no answers or new learning starts were recorded.
+
+Updated T01 and README without claiming full listing parity. Future releases,
+completed-module dates/certificate table, assessment-specific list actions and
+broader accessibility/database acceptance remain outstanding. This slice is
+uncommitted; no push was requested.
+
+#### Completed-module dates and certificate actions
+
+Continued the same uncommitted checkpoint with the Rails completed-module table
+behaviour: module overview links, saved completion dates and View certificate
+actions. The application listing and controller now carry the existing completion
+timestamp; no schema or completion-timing changes were made. The table uses
+labelled column/row headers and responsive wrapping. A missing timestamp on a
+completed view model raises an explicit error rather than displaying an invented
+date.
+
+Extracted the existing certificate UK local-date conversion into a shared helper
+so certificates and the list remain consistent across British Summer Time.
+
+**Red before green:** all four initial table/date-plumbing checks failed before
+implementation. A subsequent summer-midnight case also failed before sharing the
+date conversion. Corrected a misplaced Razor branch caught by compilation during
+implementation. The final full Release suite passed **215 tests**, including
+existing PDF and winter/summer certificate tests. Editor diagnostics and whitespace
+checks passed.
+
+**Manual evidence:** the live completed brain-development module showed its saved
+date and certificate action. No horizontal overflow was measured at 320px, 375px
+or 1280px. The certificate destination displayed the matching completion date.
+The integrated-browser click and screenshot scroll timed out while the shared
+page was not visible; the destination was checked by direct URL instead, not
+claimed as a successful click test or visual screenshot review. App/database
+health remained healthy. No answers, progress changes or new starts were made.
+
+Updated T01 and README. Future-release metadata, assessment-specific list actions
+and full accessibility/PostgreSQL acceptance remain outstanding. Changes are still
+uncommitted at the end of implementation and nothing was pushed.
+
+**Checkpoint:** the user requested a checkpoint of these verified changes.
+Commit message: Group learner modules and show completed module certificates.
+This log is included in that commit; Git history supplies its resulting hash.
+Latest full Release result: **215 passed**; whitespace checks passed. No push
+requested. Next: investigate authoritative Rails release rules and remaining
+assessment-specific list actions.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

@@ -8,7 +8,10 @@ namespace EarlyYearsFoundationRecovery.Web.Models;
 
 public sealed record CertificateViewModel(string ModuleName, CertificateData Certificate);
 
-public sealed record TrainingModuleViewModel(TrainingModule Module, string State, int VisitedPageCount);
+public sealed record TrainingModuleViewModel(TrainingModule Module, string State, int VisitedPageCount)
+{
+    public DateTimeOffset? CompletedAt { get; init; }
+}
 
 public sealed record TrainingModuleDetailViewModel(
     TrainingModule Module,

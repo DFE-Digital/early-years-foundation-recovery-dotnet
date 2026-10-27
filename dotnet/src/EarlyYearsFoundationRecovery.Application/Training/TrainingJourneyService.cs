@@ -29,6 +29,7 @@ public sealed class TrainingJourneyService(
                 var state = isCompleted ? "completed" : isStarted ? "in-progress" : "available";
                 return new ModuleListing(module, state, userProgress?.VisitedPageCount ?? 0, userProgress?.LastPageName)
                 {
+                    CompletedAt = userProgress?.CompletedAt,
                     VisitedPageNames = userProgress?.VisitedPages.Select(page => page.Name).ToArray() ?? []
                 };
             })
@@ -252,6 +253,7 @@ public sealed class TrainingJourneyService(
 
 public sealed record ModuleListing(TrainingModule Module, string State, int VisitedPageCount, string? LastPageName = null)
 {
+    public DateTimeOffset? CompletedAt { get; init; }
     public IReadOnlyCollection<string> VisitedPageNames { get; init; } = [];
 }
 

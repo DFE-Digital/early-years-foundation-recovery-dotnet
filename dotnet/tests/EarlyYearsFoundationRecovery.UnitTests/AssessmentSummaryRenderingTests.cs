@@ -24,6 +24,201 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     }
 
     [Fact]
+    public async Task ModuleListGroupsLearningStatesAndOrdersModulesWithinEachGroup()
+    {
+        TrainingModuleViewModel Item(string name, string state, int position) =>
+            new(OverviewModule() with { Name = name, Title = name, Position = position }, state, 1)
+            {
+                CompletedAt = state == "completed" ? DateTimeOffset.Parse("2026-10-20T12:00:00Z") : null
+            };
+        TrainingModuleViewModel[] modules =
+        [
+            Item("available-later", "available", 4),
+            Item("completed-module", "completed", 2),
+            Item("started-module", "in-progress", 3),
+            Item("available-first", "available", 1)
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        var started = ModuleListSection(html, "started");
+        var available = ModuleListSection(html, "available");
+        var completed = ModuleListSection(html, "completed");
+        Assert.Contains("Modules in progress", started);
+        Assert.Contains("started-module", started);
+        Assert.DoesNotContain("available-first", started);
+        Assert.Contains("Available modules", available);
+        Assert.DoesNotContain("started-module", available);
+        Assert.DoesNotContain("completed-module", available);
+        Assert.True(available.IndexOf("available-first", StringComparison.Ordinal) <
+            available.IndexOf("available-later", StringComparison.Ordinal));
+        Assert.Contains("Completed modules", completed);
+        Assert.Contains("completed-module", completed);
+        Assert.True(html.IndexOf("id=\"started\"", StringComparison.Ordinal) <
+            html.IndexOf("id=\"available\"", StringComparison.Ordinal));
+        Assert.True(html.IndexOf("id=\"available\"", StringComparison.Ordinal) <
+            html.IndexOf("id=\"completed\"", StringComparison.Ordinal));
+        Assert.Contains("<h3>", html);
+    }
+
+    [Fact]
+    public async Task NewLearnerSeesStartGuidanceAndNoEmptyCompletedGroup()
+    {
+        TrainingModuleViewModel[] modules = [new(OverviewModule(), "available", 0)];
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("To begin the training course, start an available module.", ModuleListSection(html, "started"));
+        Assert.Contains("Available modules", html);
+        Assert.DoesNotContain("id=\"completed\"", html);
+        Assert.DoesNotContain("View certificate", html);
+    }
+
+    [Fact]
+    public async Task ReturningLearnerWithNoActiveModulesSeesChooseModuleGuidance()
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule() with { Name = "finished" }, "completed", 17)
+            {
+                CompletedAt = DateTimeOffset.Parse("2026-10-20T12:00:00Z")
+            },
+            new(OverviewModule() with { Name = "next" }, "available", 0)
+        ];
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("Please choose an available module.", ModuleListSection(html, "started"));
+        Assert.DoesNotContain("To begin the training course", html);
+        Assert.Contains("next", ModuleListSection(html, "available"));
+        Assert.Contains("finished", ModuleListSection(html, "completed"));
+    }
+
+    [Fact]
+    public async Task GroupedModuleTitlesAreEncodedAndLinkToTheirOverview()
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule() with { Title = "<script>unsafe</script>", Pages = [] }, "available", 0)
+        ];
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("&lt;script&gt;unsafe&lt;/script&gt;", html);
+        Assert.DoesNotContain("<script>", html);
+        Assert.Contains("href=\"/training/module-one\"", html);
+        Assert.DoesNotContain("pages visited", html);
+        Assert.Contains("aria-labelledby=\"available-heading\"", html);
+        Assert.Contains("id=\"available-heading\"", html);
+    }
+
+    [Fact]
+    public async Task AllCompletedModulesShowCompletionMessageWithoutEmptyLearningGroups()
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule(), "completed", 5) { CompletedAt = DateTimeOffset.Parse("2026-10-20T12:00:00Z") }
+        ];
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("You have completed all available modules.", html);
+        Assert.Contains("Completed modules", ModuleListSection(html, "completed"));
+        Assert.DoesNotContain("Modules in progress", html);
+        Assert.DoesNotContain("id=\"available\"", html);
+    }
+
+    [Fact]
+    public async Task InProgressOnlyDoesNotRenderEmptyAvailableOrCompletedGroups()
+    {
+        TrainingModuleViewModel[] modules = [new(OverviewModule(), "in-progress", 3)];
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("3 of 17 pages visited", ModuleListSection(html, "started"));
+        Assert.DoesNotContain("id=\"available\"", html);
+        Assert.DoesNotContain("id=\"completed\"", html);
+        Assert.DoesNotContain("You have not started", html);
+    }
+
+    [Fact]
+    public async Task EmptyModuleListRetainsExplicitNoContentMessage()
+    {
+        var html = await RenderAsync(Array.Empty<TrainingModuleViewModel>(), "/Views/Training/Index.cshtml");
+
+        Assert.Contains("There are no training modules available at the moment.", html);
+        Assert.DoesNotContain("You have completed all", html);
+    }
+
+    private static string ModuleListSection(string html, string id)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(html,
+            $"<section id=\"{id}\"[^>]*>(.*?)</section>",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        Assert.True(match.Success, $"Expected module group {id}.");
+        return match.Groups[1].Value;
+    }
+
+    [Theory]
+    [InlineData("2026-01-02T10:30:00Z", "2 January 2026", "2026-01-02")]
+    [InlineData("2026-06-01T23:30:00Z", "2 June 2026", "2026-06-02")]
+    public async Task CompletedModuleTableShowsRecordedDateAndCertificateAction(
+        string timestamp, string expectedDate, string isoDate)
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule() with { Title = "First module" }, "completed", 4)
+            {
+                CompletedAt = DateTimeOffset.Parse(timestamp)
+            }
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+        var completed = ModuleListSection(html, "completed");
+
+        Assert.Contains("<table", completed);
+        Assert.Contains("Module name", completed);
+        Assert.Contains("Date completed", completed);
+        Assert.Contains("Actions", completed);
+        Assert.Contains("scope=\"col\"", completed);
+        Assert.Contains(expectedDate, completed);
+        Assert.Contains($"datetime=\"{isoDate}\"", completed);
+        Assert.Contains("href=\"/training/module-one\">First module</a>", completed);
+        Assert.Contains("href=\"/training/module-one/certificate\"", completed);
+        Assert.Contains("View certificate", completed);
+        Assert.DoesNotContain("pages visited", completed);
+    }
+
+    [Fact]
+    public async Task CompletedTablePreservesModuleOrderAndEncodesTitles()
+    {
+        TrainingModuleViewModel Item(string name, string title, int position) =>
+            new(OverviewModule() with { Name = name, Title = title, Position = position }, "completed", 0)
+            {
+                CompletedAt = DateTimeOffset.Parse("2026-01-02T10:30:00Z")
+            };
+        var html = await RenderAsync(new[]
+        {
+            Item("later", "Later module", 3),
+            Item("first", "<script>unsafe</script>", 1)
+        }, "/Views/Training/Index.cshtml");
+        var completed = ModuleListSection(html, "completed");
+
+        Assert.Contains("<table", completed);
+        Assert.True(completed.IndexOf("/training/first\"", StringComparison.Ordinal) <
+            completed.IndexOf("/training/later\"", StringComparison.Ordinal));
+        Assert.Contains("&lt;script&gt;unsafe&lt;/script&gt;", completed);
+        Assert.DoesNotContain("<script>", completed);
+        Assert.Contains("View certificate", completed);
+    }
+
+    [Fact]
+    public async Task CompletedTableRejectsMissingCompletionDateRatherThanInventingOne()
+    {
+        TrainingModuleViewModel[] modules = [new(OverviewModule(), "completed", 0)];
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => RenderAsync(modules, "/Views/Training/Index.cshtml"));
+
+        Assert.Equal("A completed module must have a recorded completion date.", exception.Message);
+    }
+
+    [Fact]
     public async Task OverviewRendersDescriptionOutcomesAndCriteriaThroughSanitizedContentRenderer()
     {
         var module = OverviewModule() with

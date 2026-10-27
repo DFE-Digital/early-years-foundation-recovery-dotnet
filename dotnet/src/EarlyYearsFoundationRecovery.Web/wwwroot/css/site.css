@@ -336,8 +336,32 @@ h2 {
   border-top: 5px solid #1d70b8;
 }
 
-.module-card h2 {
+.module-card h2,
+.module-card h3 {
   margin-top: 0;
+}
+
+.completed-modules {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.completed-modules th,
+.completed-modules td {
+  padding: 12px 6px;
+  border-bottom: 1px solid #b1b4b6;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.completed-modules th:first-child {
+  width: 40%;
+}
+
+.completed-modules tbody th {
+  font-weight: normal;
 }
 
 .content-list li {

@@ -1,25 +1,87 @@
 @model IReadOnlyList<EarlyYearsFoundationRecovery.Web.Models.TrainingModuleViewModel>
 @{
     ViewData["Title"] = "My modules";
+    var allCompleted = Model.Count > 0 && Model.All(item => item.State == "completed");
+    var groups = new[]
+    {
+        (State: "in-progress", Id: "started", Heading: "Modules in progress"),
+        (State: "available", Id: "available", Heading: "Available modules"),
+        (State: "completed", Id: "completed", Heading: "Completed modules")
+    };
 }
 <h1>My modules</h1>
+<p>You can complete the Early years child development training in any order. However, to support your understanding of the training, you may find it helpful to complete the modules in order.</p>
 @if (Model.Count == 0)
 {
     <p>There are no training modules available at the moment.</p>
 }
 else
 {
-    <ul class="module-list">
-        @foreach (var item in Model)
+    @if (allCompleted)
+    {
+        <p>You have completed all available modules. You may use the links below to revisit any of the course content.</p>
+    }
+    @foreach (var group in groups)
+    {
+        var modules = Model.Where(item => item.State == group.State).OrderBy(item => item.Module.Position).ToArray();
+        if (modules.Length == 0 && (group.State != "in-progress" || allCompleted))
         {
-            <li class="module-card">
-                <p class="eyebrow">@((item.State == "completed") ? "Completed" : (item.State == "in-progress") ? "In progress" : "Available")</p>
-                <h2><a asp-action="Module" asp-route-moduleName="@item.Module.Name">@item.Module.Title</a></h2>
-                @if (item.Module.Pages.Count > 0)
-                {
-                    <p>@item.VisitedPageCount of @item.Module.Pages.Count pages visited</p>
-                }
-            </li>
+            continue;
         }
-    </ul>
+        <section id="@group.Id" aria-labelledby="@group.Id-heading">
+            <h2 id="@group.Id-heading">@group.Heading</h2>
+            @if (modules.Length == 0)
+            {
+                @if (Model.Any(item => item.State == "completed"))
+                {
+                    <p>You have not started any modules. Please choose an available module.</p>
+                }
+                else
+                {
+                    <p>You have not started any modules. To begin the training course, start an available module.</p>
+                }
+            }
+            else if (group.State == "completed")
+            {
+                <table class="completed-modules" aria-labelledby="completed-heading">
+                    <thead>
+                        <tr>
+                            <th scope="col">Module name</th>
+                            <th scope="col">Date completed</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in modules)
+                        {
+                            var completedAt = item.CompletedAt
+                                ?? throw new InvalidOperationException("A completed module must have a recorded completion date.");
+                            var completedOn = EarlyYearsFoundationRecovery.Web.Content.TrainingDateFormatter.ToUkDate(completedAt);
+                            <tr>
+                                <th scope="row"><a asp-action="Module" asp-route-moduleName="@item.Module.Name">@item.Module.Title</a></th>
+                                <td><time datetime="@completedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)">@completedOn.ToString("d MMMM yyyy", System.Globalization.CultureInfo.GetCultureInfo("en-GB"))</time></td>
+                                <td><a asp-action="Certificate" asp-route-moduleName="@item.Module.Name">View certificate</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <ul class="module-list">
+                    @foreach (var item in modules)
+                    {
+                        <li class="module-card">
+                            <p class="eyebrow">@(item.State == "completed" ? "Completed" : item.State == "in-progress" ? "In progress" : "Available")</p>
+                            <h3><a asp-action="Module" asp-route-moduleName="@item.Module.Name">@item.Module.Title</a></h3>
+                            @if (item.Module.Pages.Count > 0)
+                            {
+                                <p>@item.VisitedPageCount of @item.Module.Pages.Count pages visited</p>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    }
 }
