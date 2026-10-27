@@ -60,7 +60,6 @@ public sealed class TrainingController(
             return NotFound();
         }
 
-        await training.RecordStartAsync(account, moduleName, cancellationToken);
         var listing = (await training.GetModulesAsync(account, cancellationToken))
             .SingleOrDefault(item => item.Module.Name == moduleName);
         var completedAt = await training.GetCompletionDateAsync(account, moduleName, cancellationToken);

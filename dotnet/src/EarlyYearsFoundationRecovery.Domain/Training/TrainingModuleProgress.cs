@@ -42,7 +42,6 @@ public sealed class TrainingModuleProgress
             throw new ArgumentException("A page name is required.", nameof(pageName));
         }
 
-        RecordStart(at);
         if (_visitedPages.All(page => page.Name != pageName))
         {
             _visitedPages.Add(new VisitedPage(pageName, at));

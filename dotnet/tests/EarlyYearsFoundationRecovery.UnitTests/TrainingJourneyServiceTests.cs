@@ -16,6 +16,101 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Fact]
+    public async Task OverviewDoesNotStartModuleOrLosePreLearningResumePage()
+    {
+        var controller = ConfidenceController("pre_confidence");
+        await controller.Module("module-one", CancellationToken.None);
+        var initial = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        Assert.Equal("available", Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(initial.Model)).State);
+
+        await controller.Page("module-one", "q1", CancellationToken.None);
+        var overview = Assert.IsType<ViewResult>(await controller.Module("module-one", CancellationToken.None));
+        Assert.Equal("q1", Assert.IsType<TrainingModuleDetailViewModel>(overview.Model).ResumePage?.Name);
+        var listing = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        Assert.Equal("available", Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(listing.Model)).State);
+    }
+
+    [Theory]
+    [InlineData("text_page", false)]
+    [InlineData("pre_confidence_intro", false)]
+    [InlineData("pre_confidence", false)]
+    [InlineData("topic_intro", false)]
+    [InlineData("formative", false)]
+    [InlineData("confidence", false)]
+    [InlineData("sub_module_intro", true)]
+    public async Task OnlyLearningIntroductionStartsModuleWhileEveryPageRetainsResume(string pageType, bool starts)
+    {
+        var module = ConfidenceModule(pageType);
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+        var account = new UserAccount("subject-1", "person@example.test");
+
+        await service.RecordPageViewAsync(account, module.Name, "q1", CancellationToken.None);
+
+        var saved = Assert.Single(await progress.GetForUserAsync(account.Id, CancellationToken.None));
+        Assert.Equal(starts, saved.StartedAt is not null);
+        Assert.Equal("q1", saved.LastPageName);
+        Assert.Equal(1, saved.VisitedPageCount);
+        var listing = Assert.Single(await service.GetModulesAsync(account, CancellationToken.None));
+        Assert.Equal(starts ? "in-progress" : "available", listing.State);
+    }
+
+    [Fact]
+    public async Task LearningStartAndLegacyStartRemainStableAcrossRevisits()
+    {
+        var module = ConfidenceModule("sub_module_intro");
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+        var account = new UserAccount("subject-1", "person@example.test");
+        var legacy = new TrainingModuleProgress(account.Id, module.Name);
+        var originalStart = DateTimeOffset.Parse("2026-01-01T09:00:00Z");
+        legacy.RecordStart(originalStart);
+        await progress.AddAsync(legacy, CancellationToken.None);
+
+        await service.RecordPageViewAsync(account, module.Name, "q1", CancellationToken.None);
+        await service.RecordPageViewAsync(account, module.Name, "next", CancellationToken.None);
+        await service.RecordPageViewAsync(account, module.Name, "q1", CancellationToken.None);
+
+        Assert.Equal(originalStart, legacy.StartedAt);
+        Assert.Equal(2, legacy.VisitedPageCount);
+        Assert.Equal("q1", legacy.LastPageName);
+        Assert.Equal("in-progress", Assert.Single(await service.GetModulesAsync(account, CancellationToken.None)).State);
+    }
+
+    [Fact]
+    public async Task SubmittingPreConfidenceDoesNotStartModule()
+    {
+        var controller = ConfidenceController("pre_confidence");
+        await controller.Answer("module-one", "q1",
+            new TrainingAnswerModel { SelectedAnswerIds = ["1"] }, CancellationToken.None);
+
+        var listing = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        Assert.Equal("available", Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(listing.Model)).State);
+    }
+
+    [Fact]
+    public async Task LearningIntroductionStartsModuleAndEarlierRevisitsPreserveStateAndResume()
+    {
+        var module = ConfidenceModule("pre_confidence");
+        module = module with { Pages = [module.Pages[0], module.Pages[1] with { PageType = "sub_module_intro" }] };
+        var controller = TestController(module);
+
+        await controller.Page(module.Name, "q1", CancellationToken.None);
+        await controller.Page(module.Name, "next", CancellationToken.None);
+        await controller.Page(module.Name, "q1", CancellationToken.None);
+        await controller.Module(module.Name, CancellationToken.None);
+
+        var result = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        var listing = Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(result.Model));
+        Assert.Equal("in-progress", listing.State);
+        Assert.Equal(2, listing.VisitedPageCount);
+        var overview = Assert.IsType<ViewResult>(await controller.Module(module.Name, CancellationToken.None));
+        Assert.Equal("q1", Assert.IsType<TrainingModuleDetailViewModel>(overview.Model).ResumePage?.Name);
+    }
+
+    [Fact]
     public async Task SkippingPreConfidenceDoesNotSubmitAnswersOrPreventAnsweringLater()
     {
         var module = ConfidenceModule("pre_confidence");

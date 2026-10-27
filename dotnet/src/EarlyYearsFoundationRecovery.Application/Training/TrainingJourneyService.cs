@@ -48,7 +48,8 @@ public sealed class TrainingJourneyService(
         CancellationToken cancellationToken)
     {
         var module = await content.GetModuleAsync(moduleName, cancellationToken);
-        if (module is null || module.Pages.All(page => page.Name != pageName))
+        var page = module?.Pages.SingleOrDefault(page => page.Name == pageName);
+        if (page is null)
         {
             throw new InvalidOperationException("The requested training content does not exist.");
         }
@@ -60,29 +61,12 @@ public sealed class TrainingJourneyService(
             await progress.AddAsync(userProgress, cancellationToken);
         }
 
-        userProgress.RecordPageView(pageName, timeProvider.GetUtcNow());
-        await progress.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task RecordStartAsync(
-        UserAccount account,
-        string moduleName,
-        CancellationToken cancellationToken)
-    {
-        var module = await content.GetModuleAsync(moduleName, cancellationToken);
-        if (module is null)
+        var now = timeProvider.GetUtcNow();
+        if (page.PageType == "sub_module_intro")
         {
-            throw new InvalidOperationException("The requested training module does not exist.");
+            userProgress.RecordStart(now);
         }
-
-        var userProgress = await progress.FindAsync(account.Id, moduleName, cancellationToken);
-        if (userProgress is null)
-        {
-            userProgress = new TrainingModuleProgress(account.Id, moduleName);
-            await progress.AddAsync(userProgress, cancellationToken);
-        }
-
-        userProgress.RecordStart(timeProvider.GetUtcNow());
+        userProgress.RecordPageView(pageName, now);
         await progress.SaveChangesAsync(cancellationToken);
     }
 

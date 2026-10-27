@@ -6,6 +6,10 @@ This is a new implementation of the core user journeys from the Rails applicatio
 
 The initial implementation targets Gov.UK One Login authentication, registration and account management, Contentful-backed training journeys, learning notes, assessments, progress and certificates. It uses a new PostgreSQL schema. Importing Rails users or progress, analytics and exports, bulk email/Notify workflows, feedback operations, and production Azure cutover are later work.
 
+See the [core acceptance inventory](ACCEPTANCE.md) for source-backed journey status, evidence gaps, known Rails differences and the remaining implementation order. Working local journeys and passing focused tests do not yet establish full parity or production readiness.
+
+The [AI-assisted development log](AI-LOG.md) records checkpoint history, decisions, validation and limitations. Its initial history was backfilled retrospectively; it is not a verbatim conversation transcript.
+
 ## Projects
 
 - `src/EarlyYearsFoundationRecovery.Domain` — user, progress, notes, and assessment rules.
@@ -37,6 +41,8 @@ Confidence questions display the Contentful `hint` as encoded plain text, and po
 The introduction immediately before pre-module confidence questions offers "Skip questions" to the next published `sub_module_intro`, matching the Rails optional entry route. It does not submit answers or mark the questions complete. The learning introduction's Previous link returns across the pre-confidence questions to their introduction; Previous within the questions still steps through them normally. No skip link appears on questions, interruption pages, post-module confidence checks, or when no learning introduction exists. Dedicated confidence-check start/completion/skip analytics are not yet implemented.
 
 The module overview's Continue button resumes from the last visited page, matching the Rails milestone behaviour. New modules, or modules whose saved page was removed from Contentful, start at their first available page. Completed modules instead offer "View certificate", even after revisiting earlier content. A failed assessment offers "Retake test" via the published assessment introduction (or first summative question if no introduction exists), consistently on the overview and results page. An active retry resumes normally; passing a test without recorded module completion does not unlock the certificate button.
+
+Opening an overview does not start a module. Page views and pre-confidence answers retain visited-page/resume information without setting the learning start date; reaching a `sub_module_intro` records that date once. Existing start dates are preserved, including records created by the earlier implementation. Direct visits to other page types do not implicitly start learning. Completion rules are unchanged and remain a separate parity gap.
 
 Formative answers become read-only after submission. Summative questions save and advance without revealing individual correctness during the test; results appear when all questions are answered. Passed assessments cannot be retaken or changed. Failed assessments can be retaken.
 

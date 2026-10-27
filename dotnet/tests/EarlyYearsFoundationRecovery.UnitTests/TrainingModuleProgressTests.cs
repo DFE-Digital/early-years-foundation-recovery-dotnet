@@ -14,9 +14,22 @@ public sealed class TrainingModuleProgressTests
         progress.RecordPageView("welcome", firstView.AddMinutes(1));
         progress.RecordPageView("activity", firstView.AddMinutes(2));
 
-        Assert.Equal(firstView, progress.StartedAt);
+        Assert.Null(progress.StartedAt);
         Assert.Equal(2, progress.VisitedPageCount);
         Assert.Equal("activity", progress.LastPageName);
+    }
+
+    [Fact]
+    public void ExplicitStartIsIdempotentAndSurvivesEarlierPageRevisits()
+    {
+        var progress = new TrainingModuleProgress(1, "module-one");
+        var startedAt = DateTimeOffset.Parse("2026-01-01T09:00:00Z");
+        progress.RecordStart(startedAt);
+        progress.RecordPageView("welcome", startedAt.AddMinutes(1));
+        progress.RecordStart(startedAt.AddMinutes(2));
+
+        Assert.Equal(startedAt, progress.StartedAt);
+        Assert.Equal("welcome", progress.LastPageName);
     }
 
     [Fact]
