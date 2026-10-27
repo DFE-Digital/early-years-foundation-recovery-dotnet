@@ -63,7 +63,10 @@ public sealed class TrainingController(
         await training.RecordStartAsync(account, moduleName, cancellationToken);
         var listing = (await training.GetModulesAsync(account, cancellationToken))
             .SingleOrDefault(item => item.Module.Name == moduleName);
-        return View(new TrainingModuleDetailViewModel(module, listing?.VisitedPageCount ?? 0, listing?.LastPageName));
+        var completedAt = await training.GetCompletionDateAsync(account, moduleName, cancellationToken);
+        var latestAssessment = await training.GetLatestAssessmentAsync(account, moduleName, cancellationToken);
+        return View(new TrainingModuleDetailViewModel(
+            module, listing?.VisitedPageCount ?? 0, listing?.LastPageName, completedAt, latestAssessment));
     }
 
     [HttpGet("{moduleName}/content/{pageName}")]

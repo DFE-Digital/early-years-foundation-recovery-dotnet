@@ -16,6 +16,95 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Fact]
+    public async Task CompletedModuleOverviewReturnsToCertificateEvenAfterRevisitingEarlierContent()
+    {
+        var module = ConfidenceModule("summative");
+        module = module with
+        {
+            Pages = [
+                new TrainingPage("intro", "Start test", "assessment_intro", ""),
+                module.Pages[0],
+                module.Pages[1] with { PageType = "thankyou" },
+                new TrainingPage("certificate", "Certificate", "certificate", "")
+            ]
+        };
+        var controller = TestController(module);
+        await controller.Answer(module.Name, "q1",
+            new TrainingAnswerModel { SelectedAnswerIds = ["1"] }, CancellationToken.None);
+        await controller.Page(module.Name, "next", CancellationToken.None);
+        await controller.Page(module.Name, "q1", CancellationToken.None);
+
+        var result = Assert.IsType<ViewResult>(await controller.Module(module.Name, CancellationToken.None));
+        var model = Assert.IsType<TrainingModuleDetailViewModel>(result.Model);
+
+        Assert.Equal("certificate", model.ResumePage?.Name);
+        Assert.Equal("View certificate", model.ResumeLabel);
+    }
+
+    [Fact]
+    public async Task FailedModuleOverviewOffersAssessmentIntroInsteadOfLastVisitedContent()
+    {
+        var module = ConfidenceModule("summative");
+        module = module with
+        {
+            Pages = [
+                new TrainingPage("intro", "Start test", "assessment_intro", ""),
+                module.Pages[0],
+                module.Pages[1]
+            ]
+        };
+        var controller = TestController(module);
+        await controller.Answer(module.Name, "q1",
+            new TrainingAnswerModel { SelectedAnswerIds = ["2"] }, CancellationToken.None);
+        await controller.Page(module.Name, "next", CancellationToken.None);
+
+        var result = Assert.IsType<ViewResult>(await controller.Module(module.Name, CancellationToken.None));
+        var model = Assert.IsType<TrainingModuleDetailViewModel>(result.Model);
+
+        Assert.Equal("intro", model.ResumePage?.Name);
+        Assert.Equal("Retake test", model.ResumeLabel);
+    }
+
+    [Fact]
+    public void FailedOverviewFallsBackToFirstQuestionWhenThereIsNoAssessmentIntro()
+    {
+        var module = ConfidenceModule("summative");
+        var attempt = new AssessmentAttempt(1, module.Name, DateTimeOffset.UtcNow);
+        attempt.AddOrReplaceAnswer("q1", ["2"], false);
+        attempt.Grade(1, DateTimeOffset.UtcNow);
+        var model = new TrainingModuleDetailViewModel(module, 2, "next", LatestAssessment: attempt);
+
+        Assert.Equal("q1", model.ResumePage?.Name);
+        Assert.Equal("Retake test", model.ResumeLabel);
+        Assert.Equal("q1", new AssessmentSummaryViewModel(module, attempt).RetakePage?.Name);
+    }
+
+    [Fact]
+    public void ActiveRetryResumesItsCurrentQuestionInsteadOfOfferingAnotherRetake()
+    {
+        var module = ConfidenceModule("summative");
+        var attempt = new AssessmentAttempt(1, module.Name, DateTimeOffset.UtcNow);
+        attempt.AddOrReplaceAnswer("q1", ["1"], true);
+        var model = new TrainingModuleDetailViewModel(module, 1, "q1", LatestAssessment: attempt);
+
+        Assert.Equal("q1", model.ResumePage?.Name);
+        Assert.Equal("Continue module", model.ResumeLabel);
+    }
+
+    [Fact]
+    public void PassingWithoutCompletingStillResumesTheLearningJourney()
+    {
+        var module = ConfidenceModule("summative");
+        var attempt = new AssessmentAttempt(1, module.Name, DateTimeOffset.UtcNow);
+        attempt.AddOrReplaceAnswer("q1", ["1"], true);
+        attempt.Grade(1, DateTimeOffset.UtcNow);
+        var model = new TrainingModuleDetailViewModel(module, 2, "next", LatestAssessment: attempt);
+
+        Assert.Equal("next", model.ResumePage?.Name);
+        Assert.Equal("Continue module", model.ResumeLabel);
+    }
+
+    [Fact]
     public async Task CertificateDownloadUsesTheAuthenticatedLearnerAndRecordedCompletion()
     {
         var module = ConfidenceModule("summative") with { Criteria = "- Learn about development" };

@@ -20,6 +20,6 @@
 </ol>
 @if (Model.ResumePage is not null)
 {
-    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.ResumePage.Name">@(Model.VisitedPageCount == 0 ? "Start module" : "Continue module")</a>
+    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.ResumePage.Name">@Model.ResumeLabel</a>
 }
 <p><a asp-controller="LearningLog" asp-action="Show" asp-route-moduleName="@Model.Module.Name">Open your learning log for this module</a></p>

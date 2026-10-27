@@ -10,10 +10,35 @@ public sealed record CertificateViewModel(string ModuleName, CertificateData Cer
 
 public sealed record TrainingModuleViewModel(TrainingModule Module, string State, int VisitedPageCount);
 
-public sealed record TrainingModuleDetailViewModel(TrainingModule Module, int VisitedPageCount, string? LastPageName = null)
+public sealed record TrainingModuleDetailViewModel(
+    TrainingModule Module,
+    int VisitedPageCount,
+    string? LastPageName = null,
+    DateTimeOffset? CompletedAt = null,
+    AssessmentAttempt? LatestAssessment = null)
 {
-    public TrainingPage? ResumePage =>
-        Module.Pages.FirstOrDefault(page => page.Name == LastPageName) ?? Module.Pages.FirstOrDefault();
+    public TrainingPage? ResumePage
+    {
+        get
+        {
+            if (CompletedAt is not null && Module.Pages.FirstOrDefault(page => page.PageType == "certificate") is { } certificate)
+            {
+                return certificate;
+            }
+            if (LatestAssessment?.Passed == false)
+            {
+                return Module.Pages.FirstOrDefault(page => page.PageType == "assessment_intro")
+                    ?? Module.Pages.FirstOrDefault(page => page.PageType == "summative");
+            }
+            return Module.Pages.FirstOrDefault(page => page.Name == LastPageName) ?? Module.Pages.FirstOrDefault();
+        }
+    }
+
+    public string ResumeLabel => ResumePage?.PageType == "certificate" && CompletedAt is not null
+        ? "View certificate"
+        : LatestAssessment?.Passed == false
+            ? "Retake test"
+            : VisitedPageCount == 0 ? "Start module" : "Continue module";
 }
 
 public sealed class TrainingAnswerModel
@@ -101,6 +126,9 @@ public sealed record AssessmentSummaryViewModel(TrainingModule Module, Assessmen
     }
 
     public TrainingPage? FirstQuestion => Module.Pages.FirstOrDefault(page => page.PageType == "summative");
+
+    public TrainingPage? RetakePage =>
+        Module.Pages.FirstOrDefault(page => page.PageType == "assessment_intro") ?? FirstQuestion;
 }
 
 public sealed record IncorrectAnswerViewModel(TrainingPage Question, IReadOnlyList<string> SelectedAnswers);

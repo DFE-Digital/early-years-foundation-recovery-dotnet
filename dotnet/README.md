@@ -32,7 +32,7 @@ Video pages include a direct player link if an embedded player is blocked. Live 
 
 Pre- and post-module confidence questions use a Next button without marking opinions right or wrong. Saved selections are restored when revisiting a question and can be changed. Single-select questions reject multiple submitted options server-side.
 
-The module overview's Continue button resumes from the last visited page, matching the Rails milestone behaviour. New modules, or modules whose saved page was removed from Contentful, start at their first available page.
+The module overview's Continue button resumes from the last visited page, matching the Rails milestone behaviour. New modules, or modules whose saved page was removed from Contentful, start at their first available page. Completed modules instead offer "View certificate", even after revisiting earlier content. A failed assessment offers "Retake test" via the published assessment introduction (or first summative question if no introduction exists), consistently on the overview and results page. An active retry resumes normally; passing a test without recorded module completion does not unlock the certificate button.
 
 Formative answers become read-only after submission. Summative questions save and advance without revealing individual correctness during the test; results appear when all questions are answered. Passed assessments cannot be retaken or changed. Failed assessments can be retaken.
 

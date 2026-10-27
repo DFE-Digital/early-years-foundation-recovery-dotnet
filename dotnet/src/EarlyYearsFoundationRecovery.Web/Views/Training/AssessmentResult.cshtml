@@ -38,8 +38,8 @@
         <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
     }
 }
-else if (Model.FirstQuestion is not null)
+else if (Model.RetakePage is not null)
 {
-    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.FirstQuestion.Name">Retake test</a>
+    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.RetakePage.Name">Retake test</a>
 }
 <p><a asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a></p>

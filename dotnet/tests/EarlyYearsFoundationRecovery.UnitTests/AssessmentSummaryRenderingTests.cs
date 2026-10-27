@@ -110,6 +110,54 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         Assert.Contains("This answer is no longer available in the module content.", html);
     }
 
+    [Fact]
+    public async Task FailedResultsRetakeLinkReturnsToPublishedAssessmentIntroduction()
+    {
+        var (module, attempt) = CreateAssessment(false);
+        module = module with
+        {
+            Pages = [new TrainingPage("test-intro", "End of module test", "assessment_intro", ""), .. module.Pages]
+        };
+
+        var html = await RenderAsync(new AssessmentSummaryViewModel(module, attempt));
+
+        Assert.Contains("href=\"/training/module-one/content/test-intro\"", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/incorrect\"", html);
+    }
+
+    [Fact]
+    public async Task CompletedOverviewRendersViewCertificateButton()
+    {
+        var (module, attempt) = CreateAssessment(true);
+        module = module with
+        {
+            Pages = [.. module.Pages, new TrainingPage("certificate", "Certificate", "certificate", "")]
+        };
+        var model = new TrainingModuleDetailViewModel(
+            module, 4, "topic", DateTimeOffset.UtcNow, attempt);
+
+        var html = await RenderAsync(model, "/Views/Training/Module.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/certificate\">View certificate</a>", html);
+        Assert.DoesNotContain(">Continue module</a>", html);
+    }
+
+    [Fact]
+    public async Task FailedOverviewRendersRetakeButton()
+    {
+        var (module, attempt) = CreateAssessment(false);
+        module = module with
+        {
+            Pages = [new TrainingPage("test-intro", "End of module test", "assessment_intro", ""), .. module.Pages]
+        };
+        var model = new TrainingModuleDetailViewModel(module, 3, "topic", LatestAssessment: attempt);
+
+        var html = await RenderAsync(model, "/Views/Training/Module.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/test-intro\">Retake test</a>", html);
+        Assert.DoesNotContain(">Continue module</a>", html);
+    }
+
     private static (TrainingModule Module, AssessmentAttempt Attempt) CreateAssessment(bool passed)
     {
         var module = new TrainingModule("module-one", "Module one", 1, false,
@@ -134,18 +182,24 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         return (module, attempt);
     }
 
-    private async Task<string> RenderAsync(AssessmentSummaryViewModel model)
+    private async Task<string> RenderAsync<TModel>(
+        TModel model, string viewPath = "/Views/Training/AssessmentResult.cshtml")
     {
         using var scope = _factory.Services.CreateScope();
         var services = scope.ServiceProvider;
         var http = new DefaultHttpContext { RequestServices = services };
+        http.Request.Scheme = "https";
+        http.Request.Host = new HostString("localhost");
         http.SetEndpoint(new Endpoint(null, EndpointMetadataCollection.Empty, "Razor rendering test"));
-        var actionContext = new ActionContext(http, new RouteData(), new ActionDescriptor());
+        var routeData = new RouteData();
+        routeData.Values["controller"] = "Training";
+        routeData.Values["action"] = "AssessmentResult";
+        var actionContext = new ActionContext(http, routeData, new ActionDescriptor());
         var engine = services.GetRequiredService<IRazorViewEngine>();
-        var result = engine.GetView(null, "/Views/Training/AssessmentResult.cshtml", isMainPage: false);
+        var result = engine.GetView(null, viewPath, isMainPage: false);
         Assert.True(result.Success, string.Join(", ", result.SearchedLocations ?? []));
         using var writer = new StringWriter();
-        var viewData = new ViewDataDictionary<AssessmentSummaryViewModel>(
+        var viewData = new ViewDataDictionary<TModel>(
             services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
         var viewContext = new ViewContext(actionContext, result.View, viewData,
             new TempDataDictionary(http, services.GetRequiredService<ITempDataProvider>()),
