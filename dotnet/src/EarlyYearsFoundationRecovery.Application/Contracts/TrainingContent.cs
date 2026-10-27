@@ -15,7 +15,10 @@ public sealed record TrainingPage(
     IReadOnlyList<TrainingQuestionOption>? Options = null,
     IReadOnlyList<string>? CorrectAnswerIds = null,
     string? QuestionType = null,
-    bool AllowsMultipleAnswers = false);
+    bool AllowsMultipleAnswers = false,
+    TrainingVideo? Video = null);
+
+public sealed record TrainingVideo(string? EmbedUrl, string Title, string Transcript);
 
 public sealed record TrainingQuestionOption(string Id, string Label);
 

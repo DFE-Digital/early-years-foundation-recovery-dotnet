@@ -1,42 +1,93 @@
 @model EarlyYearsFoundationRecovery.Web.Models.TrainingPageViewModel
+@inject EarlyYearsFoundationRecovery.Web.Content.TrainingContentRenderer ContentRenderer
 @{
-    ViewData["Title"] = Model.Page.Title;
+    ViewData["Title"] = Model.Title;
     var isQuestion = Model.Page.PageType is "formative" or "summative" or "confidence" or "pre_confidence";
 }
 <p class="back-link"><a asp-action="Module" asp-route-moduleName="@Model.Module.Name">Back to @Model.Module.Title</a></p>
 <p class="eyebrow">@Model.Module.Title</p>
-<h1>@Model.Page.Title</h1>
+<h1>@Model.Title</h1>
 
 @if (isQuestion)
 {
-    <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
-    <p>@Model.Page.Body</p>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div asp-validation-summary="All" class="validation-summary" role="alert"></div>
+    }
     <form asp-action="Answer" asp-route-moduleName="@Model.Module.Name" asp-route-questionName="@Model.Page.Name" method="post">
         <fieldset class="form-group">
-            <legend>@Model.Page.Title</legend>
+            <legend class="content-body">@ContentRenderer.Render(Model.Page.Body)</legend>
+            @if (!Model.IsConfidenceCheck)
+            {
+                <p>@(Model.Page.AllowsMultipleAnswers ? "Select all answers that apply." : "Select one answer.")</p>
+            }
+            <span asp-validation-for="SelectedAnswerIds" class="field-error" id="answer-error"></span>
             @foreach (var option in Model.Page.Options ?? [])
             {
                 <label class="checkbox-label">
-                    <input type="@(Model.Page.AllowsMultipleAnswers ? "checkbox" : "radio")" name="SelectedAnswerIds" value="@option.Id" />
+                    <input type="@(Model.Page.AllowsMultipleAnswers ? "checkbox" : "radio")" name="SelectedAnswerIds" value="@option.Id" checked="@Model.SelectedAnswerIds.Contains(option.Id)" disabled="@Model.IsReadOnly" aria-describedby="answer-error" />
                     @option.Label
                 </label>
             }
         </fieldset>
-        <button class="button" type="submit">Check answer</button>
+        @if (Model.PreviousPage is not null)
+        {
+            <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.PreviousPage.Name">Previous</a>
+        }
+        @if (Model.IsReadOnly)
+        {
+            @if (Model.Page.PageType == "formative")
+            {
+                <p role="status">@(Model.IsFormativeAnswerCorrect ? "That's right." : "That's not quite right.") Your answer has been saved and cannot be changed.</p>
+            }
+            else
+            {
+                <p role="status">You have passed this assessment. Your answers cannot be changed.</p>
+            }
+            @if (Model.NextPage is not null)
+            {
+                <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
+            }
+            else
+            {
+                <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+            }
+        }
+        else
+        {
+            <button class="button" type="submit">@(Model.IsConfidenceCheck ? "Next" : Model.Page.PageType == "summative" ? "Save and continue" : "Check answer")</button>
+        }
     </form>
 }
 else
 {
     <div class="content-body">
-        <p>@Model.Page.Body</p>
+        @ContentRenderer.Render(Model.Page.Body)
     </div>
-    @if (Model.Page.PageType == "assessment_results" && Model.LatestAssessment?.CompletedAt is not null)
+    @if (Model.Page.Video is { } video)
     {
-        <div class="notification @(Model.LatestAssessment.Passed == true ? "notification--success" : "notification--info")" role="status">
-            <h2>Assessment result</h2>
-            <p>Your score: @Model.LatestAssessment.Score%</p>
-            <p>@(Model.LatestAssessment.Passed == true ? "You passed." : "You did not pass. You can try again.")</p>
-        </div>
+        @if (video.EmbedUrl is not null)
+        {
+            <iframe class="training-video" src="@video.EmbedUrl" title="@(string.IsNullOrWhiteSpace(video.Title) ? Model.Title : video.Title)" allow="fullscreen; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            <p>If the player does not load, <a href="@video.EmbedUrl" target="_blank" rel="noopener noreferrer">open the video in a new tab</a> or read the transcript below.</p>
+        }
+        else
+        {
+            <p>Video not yet available. You can read the transcript below.</p>
+        }
+        <details class="video-transcript">
+            <summary>Transcript</summary>
+            <div class="content-body">
+                @if (string.IsNullOrWhiteSpace(video.Transcript))
+                {
+                    <p>A transcript is not yet available for this video.</p>
+                }
+                else
+                {
+                    @ContentRenderer.Render(video.Transcript)
+                }
+            </div>
+        </details>
     }
     @if (Model.Page.PageType == "thankyou")
     {

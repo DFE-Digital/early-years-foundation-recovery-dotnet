@@ -8,6 +8,89 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class ContentfulTrainingContentProviderTests
 {
+    [Theory]
+    [InlineData("youtube", "XnP6jaK7ZAY", "https://www.youtube.com/embed/XnP6jaK7ZAY")]
+    [InlineData("YouTube", "XnP6jaK7ZAY", "https://www.youtube.com/embed/XnP6jaK7ZAY")]
+    [InlineData("vimeo", "743243040", "https://player.vimeo.com/video/743243040")]
+    public async Task MapsVideoProviderTitleAndTranscript(string provider, string id, string expectedUrl)
+    {
+        var page = await MapVideoPageAsync(provider, id);
+
+        Assert.Equal("video_page", page.PageType);
+        Assert.Equal("Video heading", page.Title);
+        Assert.NotNull(page.Video);
+        Assert.Equal(expectedUrl, page.Video.EmbedUrl);
+        Assert.Equal("Video title", page.Video.Title);
+        Assert.Equal("## Transcript\n\nAn expert explains child development.", page.Video.Transcript);
+    }
+
+    [Fact]
+    public async Task VideoWithoutAnIdStillProvidesATranscript()
+    {
+        var page = await MapVideoPageAsync("youtube", "");
+
+        Assert.NotNull(page.Video);
+        Assert.Null(page.Video.EmbedUrl);
+        Assert.NotEmpty(page.Video.Transcript);
+    }
+
+    [Theory]
+    [InlineData("unknown", "video-id")]
+    [InlineData("youtube", "../untrusted")]
+    [InlineData("youtube", "https://untrusted.test/video")]
+    [InlineData("vimeo", "123?autoplay=1")]
+    public async Task InvalidVideoMetadataRaisesAnExplicitContentError(string provider, string id)
+    {
+        await Assert.ThrowsAsync<InvalidDataException>(() => MapVideoPageAsync(provider, id));
+    }
+
+    private static async Task<EarlyYearsFoundationRecovery.Application.Contracts.TrainingPage> MapVideoPageAsync(
+        string provider,
+        string id)
+    {
+        var response = VideoResponse
+            .Replace("VIDEO_PROVIDER", provider, StringComparison.Ordinal)
+            .Replace("VIDEO_ID", id, StringComparison.Ordinal);
+        using var httpClient = new HttpClient(new StubHttpMessageHandler(response));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Contentful:Space"] = "test-space",
+                ["Contentful:DeliveryToken"] = "test-token"
+            })
+            .Build();
+        var client = new ContentfulDeliveryClient(httpClient, configuration, cache);
+        var modules = await new ContentfulTrainingContentProvider(client).GetModulesAsync(CancellationToken.None);
+        return Assert.Single(Assert.Single(modules).Pages);
+    }
+
+    private const string VideoResponse = """
+        {
+          "items": [{
+            "sys": {"id": "module-one", "contentType": {"sys": {"id": "trainingModule"}}},
+            "fields": {
+              "name": "module-one",
+              "title": "Module one",
+              "pages": [{"sys": {"id": "video-one", "type": "Link", "linkType": "Entry"}}]
+            }
+          }],
+          "includes": {
+            "Entry": [{
+              "sys": {"id": "video-one", "contentType": {"sys": {"id": "video"}}},
+              "fields": {
+                "name": "video-one",
+                "heading": "Video heading",
+                "title": "Video title",
+                "video_id": "VIDEO_ID",
+                "video_provider": "VIDEO_PROVIDER",
+                "transcript": "## Transcript\n\nAn expert explains child development."
+              }
+            }]
+          }
+        }
+        """;
+
     [Fact]
     public async Task MapsLinkedModulePagesAndSummativeAnswers()
     {

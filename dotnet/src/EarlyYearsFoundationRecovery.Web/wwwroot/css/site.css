@@ -35,6 +35,28 @@ textarea:focus {
   box-shadow: 0 0 0 4px #0b0c0c;
 }
 
+summary:focus {
+  outline: 3px solid #ffdd00;
+  outline-offset: 0;
+}
+
+.training-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+
+.video-transcript {
+  margin-block: 24px;
+}
+
+.video-transcript summary {
+  color: #1d70b8;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .container {
   width: min(100% - 32px, 960px);
   margin-inline: auto;

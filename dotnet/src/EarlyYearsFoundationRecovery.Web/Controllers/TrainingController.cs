@@ -61,7 +61,7 @@ public sealed class TrainingController(
         await training.RecordStartAsync(account, moduleName, cancellationToken);
         var listing = (await training.GetModulesAsync(account, cancellationToken))
             .SingleOrDefault(item => item.Module.Name == moduleName);
-        return View(new TrainingModuleDetailViewModel(module, listing?.VisitedPageCount ?? 0));
+        return View(new TrainingModuleDetailViewModel(module, listing?.VisitedPageCount ?? 0, listing?.LastPageName));
     }
 
     [HttpGet("{moduleName}/content/{pageName}")]
@@ -76,6 +76,11 @@ public sealed class TrainingController(
             return NotFound();
         }
 
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+
         var module = await training.GetModuleAsync(moduleName, cancellationToken);
         var page = module?.Pages.SingleOrDefault(item => item.Name == pageName);
         if (module is null || module.IsDraft || page is null)
@@ -83,18 +88,43 @@ public sealed class TrainingController(
             return NotFound();
         }
 
-        await training.RecordPageViewAsync(account, moduleName, pageName, cancellationToken);
-        if (page.PageType == "thankyou")
+        if (page.PageType == "assessment_results")
         {
-            await training.CompleteModuleAsync(account, moduleName, cancellationToken);
+            return RedirectToAction(nameof(AssessmentResult), new { moduleName });
         }
+
+        if (page.PageType == "thankyou" &&
+            !await training.CompleteModuleAsync(account, moduleName, cancellationToken))
+        {
+            TempData["TrainingNotice"] = "Pass the end of module test before completing this module.";
+            return RedirectToAction(nameof(Module), new { moduleName });
+        }
+
+        if (page.PageType == "certificate")
+        {
+            var listing = (await training.GetModulesAsync(account, cancellationToken))
+                .Single(item => item.Module.Name == moduleName);
+            if (listing.State != "completed")
+            {
+                TempData["TrainingNotice"] = "Complete this module before viewing your certificate.";
+                return RedirectToAction(nameof(Module), new { moduleName });
+            }
+        }
+
+        await training.RecordPageViewAsync(account, moduleName, pageName, cancellationToken);
 
         var index = module.Pages.ToList().IndexOf(page);
         var nextPage = index >= 0 && index + 1 < module.Pages.Count
             ? module.Pages[index + 1]
             : null;
         var latestAssessment = await training.GetLatestAssessmentAsync(account, moduleName, cancellationToken);
-        return View("Page", new TrainingPageViewModel(module, page, nextPage, latestAssessment));
+        var selectedAnswers = page.PageType is "confidence" or "pre_confidence" or "formative"
+            ? await training.GetSelectedAnswersAsync(account, moduleName, pageName, cancellationToken)
+            : latestAssessment?.Answers.SingleOrDefault(answer => answer.QuestionName == pageName)?.SelectedAnswerIds.ToArray() ?? [];
+        return View("Page", new TrainingPageViewModel(module, page, nextPage, latestAssessment)
+        {
+            SelectedAnswerIds = selectedAnswers
+        });
     }
 
     [HttpPost("{moduleName}/questions/{questionName}")]
@@ -111,9 +141,15 @@ public sealed class TrainingController(
             return NotFound();
         }
 
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+
         var module = await training.GetModuleAsync(moduleName, cancellationToken);
         var question = module?.Pages.SingleOrDefault(item => item.Name == questionName);
-        if (module is null || question is null)
+        if (module is null || module.IsDraft || question is null ||
+            question.PageType is not ("formative" or "summative" or "confidence" or "pre_confidence"))
         {
             return NotFound();
         }
@@ -128,20 +164,69 @@ public sealed class TrainingController(
                 model.SelectedAnswerIds,
                 cancellationToken);
         }
-        catch (ArgumentException exception)
+        catch (ArgumentException exception) when (exception.ParamName == "selectedAnswerIds")
         {
-            ModelState.AddModelError(nameof(model.SelectedAnswerIds), exception.Message);
+            ModelState.AddModelError(nameof(model.SelectedAnswerIds), "Select a valid answer before continuing.");
             var index = module.Pages.ToList().IndexOf(question);
             var nextPage = index >= 0 && index + 1 < module.Pages.Count ? module.Pages[index + 1] : null;
             var latestAssessment = await training.GetLatestAssessmentAsync(account, moduleName, cancellationToken);
-            return View("Page", new TrainingPageViewModel(module, question, nextPage, latestAssessment));
+            return View("Page", new TrainingPageViewModel(module, question, nextPage, latestAssessment)
+            {
+                SelectedAnswerIds = model.SelectedAnswerIds
+            });
         }
-        catch (InvalidOperationException)
+
+        if (question.PageType is "confidence" or "pre_confidence" ||
+            (question.PageType == "summative" && !result.IsComplete))
+        {
+            var index = module.Pages.ToList().IndexOf(question);
+            return index + 1 < module.Pages.Count
+                ? RedirectToAction(nameof(Page), new { moduleName, pageName = module.Pages[index + 1].Name })
+                : RedirectToAction(nameof(Module), new { moduleName });
+        }
+
+        if (question.PageType == "summative")
+        {
+            return RedirectToAction(nameof(AssessmentResult), new { moduleName });
+        }
+
+        return View("AnswerResult", new AssessmentResultViewModel(module, question, result));
+    }
+
+    [HttpGet("{moduleName}/assessment-result")]
+    public async Task<IActionResult> AssessmentResult(string moduleName, CancellationToken cancellationToken)
+    {
+        var account = await CurrentAccountAsync(cancellationToken);
+        if (account is null)
         {
             return NotFound();
         }
 
-        return View("AnswerResult", new AssessmentResultViewModel(module, question, result));
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+
+        var module = await training.GetModuleAsync(moduleName, cancellationToken);
+        if (module is null || module.IsDraft)
+        {
+            return NotFound();
+        }
+
+        var assessment = await training.GetLatestAssessmentAsync(account, moduleName, cancellationToken);
+        if (assessment?.CompletedAt is null)
+        {
+            TempData["TrainingNotice"] = "Answer all questions in the end of module test to see your result.";
+            return RedirectToAction(nameof(Module), new { moduleName });
+        }
+
+        var resultsPage = module.Pages.FirstOrDefault(page => page.PageType == "assessment_results");
+        if (resultsPage is not null)
+        {
+            await training.RecordPageViewAsync(account, moduleName, resultsPage.Name, cancellationToken);
+        }
+
+        return View(new AssessmentSummaryViewModel(module, assessment));
     }
 
     private async Task<UserAccount?> CurrentAccountAsync(CancellationToken cancellationToken)

@@ -26,6 +26,8 @@ public interface ITrainingProgressStore
 
     Task AddResponseAsync(TrainingResponse response, CancellationToken cancellationToken);
 
+    Task<TrainingResponse?> GetLatestResponseAsync(long userId, string moduleName, string questionName, CancellationToken cancellationToken);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }
 

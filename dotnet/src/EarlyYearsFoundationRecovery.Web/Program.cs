@@ -5,6 +5,7 @@ using EarlyYearsFoundationRecovery.Infrastructure.Contentful;
 using EarlyYearsFoundationRecovery.Infrastructure.Persistence;
 using EarlyYearsFoundationRecovery.Infrastructure.Registration;
 using EarlyYearsFoundationRecovery.Web.Authentication;
+using EarlyYearsFoundationRecovery.Web.Content;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -20,6 +21,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 }
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddScoped<TrainingContentRenderer>();
 builder.Services.AddMemoryCache();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));

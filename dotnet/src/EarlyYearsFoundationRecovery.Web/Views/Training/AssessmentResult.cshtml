@@ -1,0 +1,21 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AssessmentSummaryViewModel
+@{
+    ViewData["Title"] = "Assessment result";
+}
+<h1>Assessment result</h1>
+<div class="notification @(Model.Assessment.Passed == true ? "notification--success" : "notification--info")" role="status">
+    <p>Your assessment score is @Model.Assessment.Score%.</p>
+    <p>@(Model.Assessment.Passed == true ? "You passed the assessment." : "You did not pass. You can try again.")</p>
+</div>
+@if (Model.Assessment.Passed == true)
+{
+    @if (Model.NextPage is not null)
+    {
+        <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
+    }
+}
+else if (Model.FirstQuestion is not null)
+{
+    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.FirstQuestion.Name">Retake test</a>
+}
+<p><a asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a></p>

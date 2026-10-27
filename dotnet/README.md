@@ -16,6 +16,20 @@ The initial implementation targets Gov.UK One Login authentication, registration
 
 ## Local setup
 
+Training page, question and video transcript bodies render Markdown headings, lists, links and tables. Raw HTML is disabled and generated HTML is sanitized using an allowlist based on the Rails content helper. YouTube and Vimeo video entries render responsive embeds with expandable transcripts. Invalid IDs and unsupported providers produce explicit content errors rather than arbitrary embed URLs. Linked assets and Contentful rich-text fidelity still require further parity work.
+
+Video pages include a direct player link if an embedded player is blocked. Live Vimeo embed metadata and transcript toggling have been checked locally, but playback in a normal browser still needs verification; the integrated browser aborted the external iframe request.
+
+Pre- and post-module confidence questions use a Next button without marking opinions right or wrong. Saved selections are restored when revisiting a question and can be changed. Single-select questions reject multiple submitted options server-side.
+
+The module overview's Continue button resumes from the last visited page, matching the Rails milestone behaviour. New modules, or modules whose saved page was removed from Contentful, start at their first available page.
+
+Formative answers become read-only after submission. Summative questions save and advance without revealing individual correctness during the test; results appear when all questions are answered. Passed assessments cannot be retaken or changed. Failed assessments can be retaken.
+
+Summative submissions redirect to a GET results page so refreshing results does not resubmit answers. Contentful assessment-results pages use that same summary, and unfinished attempts do not display a final score.
+
+Direct navigation to the thank-you page does not mark a module complete without a passing assessment. Certificate pages require recorded module completion. Certificate PDF generation and full completion-flow parity remain unfinished.
+
 Install the .NET 10 SDK and PostgreSQL 15 or later. The Development profile uses a local PostgreSQL database named `eyfr_dotnet` and sample training content. Set `ConnectionStrings__Application` if your local connection differs.
 
 ```sh

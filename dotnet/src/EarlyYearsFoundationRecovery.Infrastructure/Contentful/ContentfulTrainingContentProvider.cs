@@ -75,6 +75,11 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
             .Select(item => item.id)
             .ToArray();
         var pageType = ContentfulDeliveryClient.StringField(fields, "page_type");
+        if (contentType == "video")
+        {
+            pageType = "video_page";
+        }
+
         if (contentType == "question" && (pageType is "confidence" or "pre_confidence"))
         {
             options =
@@ -98,7 +103,34 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
             options,
             correctAnswers,
             contentType == "question" ? pageType : null,
-            (pageType is "formative" or "summative") && correctAnswers.Length > 1);
+            (pageType is "formative" or "summative") && correctAnswers.Length > 1,
+            contentType == "video" ? MapVideo(fields) : null);
+    }
+
+    private static TrainingVideo MapVideo(JsonElement fields)
+    {
+        var id = ContentfulDeliveryClient.StringField(fields, "video_id");
+        string? embedUrl = null;
+        if (id.Length > 0)
+        {
+            if (id.Any(character => !char.IsAsciiLetterOrDigit(character) && character is not ('-' or '_')))
+            {
+                throw new InvalidDataException("Contentful video IDs must contain only letters, numbers, hyphens or underscores.");
+            }
+
+            var provider = ContentfulDeliveryClient.StringField(fields, "video_provider").ToLowerInvariant();
+            embedUrl = provider switch
+            {
+                "youtube" => $"https://www.youtube.com/embed/{id}",
+                "vimeo" => $"https://player.vimeo.com/video/{id}",
+                _ => throw new InvalidDataException($"Unsupported Contentful video provider '{provider}'.")
+            };
+        }
+
+        return new TrainingVideo(
+            embedUrl,
+            ContentfulDeliveryClient.StringField(fields, "title"),
+            ContentfulDeliveryClient.StringField(fields, "transcript"));
     }
 
     private static IEnumerable<JsonElement> ResolveReferences(

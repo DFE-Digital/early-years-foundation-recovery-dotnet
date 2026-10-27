@@ -56,6 +56,19 @@ public sealed class TrainingProgressStore(ApplicationDbContext db) : ITrainingPr
     public Task AddResponseAsync(TrainingResponse response, CancellationToken cancellationToken) =>
         db.TrainingResponses.AddAsync(response, cancellationToken).AsTask();
 
+    public Task<TrainingResponse?> GetLatestResponseAsync(
+        long userId,
+        string moduleName,
+        string questionName,
+        CancellationToken cancellationToken) =>
+        db.TrainingResponses
+            .Where(response => response.UserAccountId == userId &&
+                               response.ModuleName == moduleName &&
+                               response.QuestionName == questionName)
+            .OrderByDescending(response => response.CreatedAt)
+            .ThenByDescending(response => response.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         db.SaveChangesAsync(cancellationToken);
 }

@@ -27,7 +27,7 @@ public sealed class TrainingJourneyService(
                 var isCompleted = userProgress?.CompletedAt is not null;
                 var isStarted = userProgress?.StartedAt is not null;
                 var state = isCompleted ? "completed" : isStarted ? "in-progress" : "available";
-                return new ModuleListing(module, state, userProgress?.VisitedPageCount ?? 0);
+                return new ModuleListing(module, state, userProgress?.VisitedPageCount ?? 0, userProgress?.LastPageName);
             })
             .ToArray();
     }
@@ -103,7 +103,8 @@ public sealed class TrainingJourneyService(
         var validOptionIds = (question.Options ?? [])
             .Select(option => option.Id)
             .ToHashSet(StringComparer.Ordinal);
-        if (submitted.Length == 0 || submitted.Any(answer => !validOptionIds.Contains(answer)))
+        if (submitted.Length == 0 || submitted.Any(answer => !validOptionIds.Contains(answer)) ||
+            (!question.AllowsMultipleAnswers && submitted.Length > 1))
         {
             throw new ArgumentException("Select a valid answer before continuing.", nameof(selectedAnswerIds));
         }
@@ -112,6 +113,16 @@ public sealed class TrainingJourneyService(
                       AssessmentGrader.IsCorrect(question.CorrectAnswerIds ?? [], submitted);
         if (question.PageType != "summative")
         {
+            if (question.PageType == "formative")
+            {
+                var previousResponse = await progress.GetLatestResponseAsync(
+                    account.Id, moduleName, questionName, cancellationToken);
+                if (previousResponse is not null)
+                {
+                    return new AssessmentResult(previousResponse.Correct, null, null, false);
+                }
+            }
+
             await progress.AddResponseAsync(
                 new TrainingResponse(
                     account.Id,
@@ -127,6 +138,16 @@ public sealed class TrainingJourneyService(
         }
 
         var attempts = await progress.GetAssessmentsAsync(account.Id, moduleName, cancellationToken);
+        var passedAttempt = attempts.LastOrDefault(item => item.Passed == true);
+        if (passedAttempt is not null)
+        {
+            return new AssessmentResult(
+                passedAttempt.Answers.SingleOrDefault(answer => answer.QuestionName == questionName)?.IsCorrect == true,
+                passedAttempt.Score,
+                true,
+                true);
+        }
+
         var attempt = attempts.LastOrDefault(item => item.CompletedAt is null);
         if (attempt is null)
         {
@@ -153,6 +174,17 @@ public sealed class TrainingJourneyService(
         var score = attempt.Grade(summativeQuestionNames.Count, timeProvider.GetUtcNow());
         await progress.SaveChangesAsync(cancellationToken);
         return new AssessmentResult(correct, score, attempt.Passed, true);
+    }
+
+    public async Task<IReadOnlyList<string>> GetSelectedAnswersAsync(
+        UserAccount account,
+        string moduleName,
+        string questionName,
+        CancellationToken cancellationToken)
+    {
+        var response = await progress.GetLatestResponseAsync(
+            account.Id, moduleName, questionName, cancellationToken);
+        return response?.SelectedAnswerIds ?? [];
     }
 
     public async Task<bool> CompleteModuleAsync(
@@ -225,6 +257,6 @@ public sealed class TrainingJourneyService(
     }
 }
 
-public sealed record ModuleListing(TrainingModule Module, string State, int VisitedPageCount);
+public sealed record ModuleListing(TrainingModule Module, string State, int VisitedPageCount, string? LastPageName = null);
 
 public sealed record AssessmentResult(bool Correct, decimal? Score, bool? Passed, bool IsComplete);
