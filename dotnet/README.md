@@ -36,6 +36,8 @@ The module overview's Continue button resumes from the last visited page, matchi
 
 Formative answers become read-only after submission. Summative questions save and advance without revealing individual correctness during the test; results appear when all questions are answered. Passed assessments cannot be retaken or changed. Failed assessments can be retaken.
 
+Learning checks show the question's Contentful `success_message` or `failure_message` after submission and when revisiting a saved answer. Incorrect answers also show all correct option labels and, when guidance exists, an explanation. Both views share the same feedback partial and sanitized Markdown/rich-text rendering. Unanswered questions, confidence checks and unfinished summative questions do not show this feedback; the saved formative answer remains locked.
+
 Summative submissions redirect to a GET results page so refreshing results does not resubmit answers. Contentful assessment-results pages use that same summary, and unfinished attempts do not display a final score.
 
 Completed assessment results show only incorrectly answered questions, the learner's selected answer labels, and the question's Contentful `failure_message` guidance. Guidance uses the same sanitized Markdown/rich-text renderer and can link back to relevant topics. This review appears for failed attempts and passes with mistakes, but not perfect scores or unfinished attempts. It is read-only and does not expose unselected options or alter assessment answers. If an option has since been removed from Contentful, the review explicitly says it is no longer available. Razor rendering tests cover the actual results HTML.

@@ -94,6 +94,16 @@ public sealed record AssessmentResultViewModel(
     TrainingPage Question,
     AssessmentResult Result);
 
+public sealed record FormativeFeedbackViewModel(TrainingPage Question, bool Correct)
+{
+    public string Guidance => Correct ? Question.SuccessMessage : Question.FailureMessage;
+
+    public IReadOnlyList<string> CorrectAnswers => (Question.Options ?? [])
+        .Where(option => Question.CorrectAnswerIds?.Contains(option.Id) == true)
+        .Select(option => option.Label)
+        .ToArray();
+}
+
 public sealed record AssessmentSummaryViewModel(TrainingModule Module, AssessmentAttempt Assessment)
 {
     public IReadOnlyList<IncorrectAnswerViewModel> IncorrectAnswers =>

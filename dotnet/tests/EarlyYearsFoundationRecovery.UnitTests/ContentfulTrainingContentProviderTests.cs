@@ -11,11 +11,13 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class ContentfulTrainingContentProviderTests
 {
-    [Fact]
-    public async Task MapsRichTextAssessmentFeedbackThroughTheSameSanitizedPipeline()
+    [Theory]
+    [InlineData("failure_message")]
+    [InlineData("success_message")]
+    public async Task MapsRichTextAssessmentFeedbackThroughTheSameSanitizedPipeline(string field)
     {
         var response = JsonNode.Parse(ContentfulResponse)!;
-        response["includes"]!["Entry"]![0]!["fields"]!["failure_message"] = JsonNode.Parse("""
+        response["includes"]!["Entry"]![0]!["fields"]![field] = JsonNode.Parse("""
             {"en-US":{"nodeType":"document","content":[
               {"nodeType":"paragraph","content":[{"nodeType":"text","value":"Try observing individual needs.","marks":[{"type":"bold"}]}]}
             ]}}
@@ -24,7 +26,7 @@ public sealed class ContentfulTrainingContentProviderTests
         var question = await MapPageResponseAsync(response.ToJsonString());
 
         Assert.Contains("<strong>Try observing individual needs.</strong>",
-            new TrainingContentRenderer().Render(question.FailureMessage).Value!);
+            new TrainingContentRenderer().Render(field == "failure_message" ? question.FailureMessage : question.SuccessMessage).Value!);
     }
 
     [Fact]
@@ -320,6 +322,7 @@ public sealed class ContentfulTrainingContentProviderTests
         Assert.Equal("summative", question.PageType);
         Assert.Equal("Which answer is correct?", question.Body);
         Assert.Equal("Read [the topic](/training/module-one/content/topic) again.", question.FailureMessage);
+        Assert.Equal("Well done: **observe individual needs**.", question.SuccessMessage);
         Assert.Equal(["2"], question.CorrectAnswerIds);
         Assert.Equal("Yes", question.Options![1].Label);
         Assert.True(question.AllowsMultipleAnswers is false);
@@ -364,7 +367,8 @@ public sealed class ContentfulTrainingContentProviderTests
                     }
                   },
                   "answers": { "en-US": [["No", false], ["Yes", true]] },
-                  "failure_message": { "en-US": "Read [the topic](/training/module-one/content/topic) again." }
+                  "failure_message": { "en-US": "Read [the topic](/training/module-one/content/topic) again." },
+                  "success_message": { "en-US": "Well done: **observe individual needs**." }
                 }
               }
             ]

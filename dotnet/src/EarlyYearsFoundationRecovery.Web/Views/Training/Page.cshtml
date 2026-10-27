@@ -39,6 +39,7 @@
             @if (Model.Page.PageType == "formative")
             {
                 <p role="status">@(Model.IsFormativeAnswerCorrect ? "That's right." : "That's not quite right.") Your answer has been saved and cannot be changed.</p>
+                <partial name="_FormativeFeedback" model="new EarlyYearsFoundationRecovery.Web.Models.FormativeFeedbackViewModel(Model.Page, Model.IsFormativeAnswerCorrect)" />
             }
             else
             {
