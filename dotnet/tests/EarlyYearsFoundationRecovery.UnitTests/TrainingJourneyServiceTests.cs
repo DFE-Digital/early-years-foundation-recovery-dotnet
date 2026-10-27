@@ -16,6 +16,79 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Fact]
+    public async Task DraftModulesAppearAsUpcomingWithoutExposingTrainingRoutes()
+    {
+        var module = ConfidenceModule("summative");
+        module = module with
+        {
+            IsDraft = true,
+            Upcoming = "Coming later.",
+            Pages = [.. module.Pages, new("certificate", "Certificate", "certificate", "")]
+        };
+        var controller = TestController(module);
+
+        var result = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        var listing = Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(result.Model));
+
+        Assert.Equal("upcoming", listing.State);
+        Assert.Equal("Coming later.", listing.Module.Upcoming);
+        Assert.Null(listing.LatestAssessment);
+        Assert.IsType<NotFoundResult>(await controller.Module(module.Name, CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Page(module.Name, "q1", CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Certificate(module.Name, CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.AssessmentResult(module.Name, CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Answer(
+            module.Name, "q1", new TrainingAnswerModel { SelectedAnswerIds = ["1"] }, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DraftClassificationOverridesHistoricalLearningStateWithoutChangingSavedProgress(bool completed)
+    {
+        var module = ConfidenceModule("summative") with { IsDraft = true };
+        var account = new UserAccount("subject-1", "person@example.test");
+        var progress = new InMemoryProgressStore();
+        var saved = new TrainingModuleProgress(account.Id, module.Name);
+        var completedAt = DateTimeOffset.Parse("2026-01-02T10:30:00Z");
+        saved.RecordStart(completedAt);
+        if (completed)
+        {
+            saved.RecordCompletion(completedAt);
+        }
+        await progress.AddAsync(saved, CancellationToken.None);
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+
+        var listing = Assert.Single(await service.GetModulesAsync(account, CancellationToken.None));
+
+        Assert.Equal("upcoming", listing.State);
+        Assert.Equal(completedAt, saved.StartedAt);
+        Assert.Equal(completed ? completedAt : (DateTimeOffset?)null, saved.CompletedAt);
+        Assert.Equal(saved.CompletedAt, listing.CompletedAt);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ModuleListReceivesLatestGradedAssessmentForInProgressModule(bool passed)
+    {
+        var module = ConfidenceModule("summative");
+        module = module with { Pages = [new("learning", "Learning", "sub_module_intro", ""), .. module.Pages] };
+        var controller = TestController(module);
+        await controller.Page(module.Name, "learning", CancellationToken.None);
+        await controller.Answer(module.Name, "q1",
+            new TrainingAnswerModel { SelectedAnswerIds = [passed ? "1" : "2"] }, CancellationToken.None);
+
+        var result = Assert.IsType<ViewResult>(await controller.Index(CancellationToken.None));
+        var listing = Assert.Single(Assert.IsType<TrainingModuleViewModel[]>(result.Model));
+
+        Assert.Equal("in-progress", listing.State);
+        Assert.NotNull(listing.LatestAssessment);
+        Assert.Equal(passed, listing.LatestAssessment.Passed);
+    }
+
+    [Fact]
     public async Task ModuleListingRetainsRecordedCompletionDateWithoutWritingProgress()
     {
         var module = ConfidenceModule("summative");

@@ -31,16 +31,22 @@ public sealed class TrainingController(
         }
 
         var modules = await training.GetModulesAsync(account, cancellationToken);
-        return View(modules
-            .Where(item => !item.Module.IsDraft)
-            .Select(item => new TrainingModuleViewModel(
+        var models = new List<TrainingModuleViewModel>();
+        foreach (var item in modules)
+        {
+            var assessment = item.State == "in-progress"
+                ? await training.GetLatestAssessmentAsync(account, item.Module.Name, cancellationToken)
+                : null;
+            models.Add(new TrainingModuleViewModel(
                 item.Module,
                 item.State,
                 item.VisitedPageCount)
             {
-                CompletedAt = item.CompletedAt
-            })
-            .ToArray());
+                CompletedAt = item.CompletedAt,
+                LatestAssessment = assessment
+            });
+        }
+        return View(models.ToArray());
     }
 
     [HttpGet("{moduleName}")]

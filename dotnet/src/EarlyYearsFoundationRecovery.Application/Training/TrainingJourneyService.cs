@@ -26,7 +26,7 @@ public sealed class TrainingJourneyService(
                 progressByModule.TryGetValue(module.Name, out var userProgress);
                 var isCompleted = userProgress?.CompletedAt is not null;
                 var isStarted = userProgress?.StartedAt is not null;
-                var state = isCompleted ? "completed" : isStarted ? "in-progress" : "available";
+                var state = module.IsDraft ? "upcoming" : isCompleted ? "completed" : isStarted ? "in-progress" : "available";
                 return new ModuleListing(module, state, userProgress?.VisitedPageCount ?? 0, userProgress?.LastPageName)
                 {
                     CompletedAt = userProgress?.CompletedAt,

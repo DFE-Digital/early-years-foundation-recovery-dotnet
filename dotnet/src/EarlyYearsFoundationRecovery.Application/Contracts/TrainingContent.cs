@@ -8,7 +8,8 @@ public sealed record TrainingModule(
     IReadOnlyList<TrainingPage> Pages,
     string Criteria = "",
     string Description = "",
-    string Outcomes = "");
+    string Outcomes = "",
+    string Upcoming = "");
 
 public sealed record TrainingPage(
     string Name,

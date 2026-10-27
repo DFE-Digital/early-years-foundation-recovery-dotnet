@@ -70,6 +70,7 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         Assert.Contains("To begin the training course, start an available module.", ModuleListSection(html, "started"));
         Assert.Contains("Available modules", html);
         Assert.DoesNotContain("id=\"completed\"", html);
+        Assert.DoesNotContain("id=\"upcoming\"", html);
         Assert.DoesNotContain("View certificate", html);
     }
 
@@ -145,6 +146,74 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         Assert.DoesNotContain("You have completed all", html);
     }
 
+    [Fact]
+    public async Task UpcomingModulesShowOrderedNonLinkedCardsWithEncodedContent()
+    {
+        TrainingModuleViewModel Item(string name, string title, int position, string upcoming) =>
+            new(OverviewModule() with
+            {
+                Name = name, Title = title, Position = position, IsDraft = true, Upcoming = upcoming
+            }, "upcoming", 0);
+        TrainingModuleViewModel[] modules =
+        [
+            Item("later", "Later module", 10, ""),
+            Item("first", "<script>unsafe</script>", 9, "<img src=x onerror=alert(1)>")
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+        var upcoming = ModuleListSection(html, "upcoming");
+
+        Assert.Contains("Future modules in this course", upcoming);
+        Assert.Contains("Coming soon - Module 9:", upcoming);
+        Assert.True(upcoming.IndexOf("Module 9:", StringComparison.Ordinal) <
+            upcoming.IndexOf("Module 10:", StringComparison.Ordinal));
+        Assert.Contains("&lt;script&gt;unsafe&lt;/script&gt;", upcoming);
+        Assert.Contains("&lt;img", upcoming);
+        Assert.DoesNotContain("<a ", upcoming);
+        Assert.DoesNotContain("<img ", upcoming);
+        Assert.DoesNotContain("pages visited", upcoming);
+        Assert.DoesNotContain("View certificate", upcoming);
+        Assert.DoesNotContain("You have completed all", html);
+    }
+
+    [Fact]
+    public async Task FutureModulesKeepCourseOpenAfterAllAvailableModulesAreCompleted()
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule(), "completed", 17) { CompletedAt = DateTimeOffset.UtcNow },
+            new(OverviewModule() with { Name = "future", Title = "Future module", IsDraft = true, Position = 2 },
+                "upcoming", 0)
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("You do not have any modules available.", ModuleListSection(html, "available"));
+        Assert.Contains("Future module", ModuleListSection(html, "upcoming"));
+        Assert.Contains("Completed modules", ModuleListSection(html, "completed"));
+        Assert.DoesNotContain("You have completed all available modules.", html);
+        Assert.True(html.IndexOf("id=\"upcoming\"", StringComparison.Ordinal) <
+            html.IndexOf("id=\"completed\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task UpcomingAndAvailableModulesRemainInSeparateGroups()
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule() with { Name = "future", Title = "Future module", IsDraft = true }, "upcoming", 0),
+            new(OverviewModule(), "available", 0)
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("href=\"/training/module-one\"", ModuleListSection(html, "available"));
+        Assert.DoesNotContain("Future module", ModuleListSection(html, "available"));
+        Assert.Contains("Future module", ModuleListSection(html, "upcoming"));
+        Assert.DoesNotContain("You do not have any modules available.", html);
+        Assert.DoesNotContain("href=\"/training/future", html);
+    }
+
     private static string ModuleListSection(string html, string id)
     {
         var match = System.Text.RegularExpressions.Regex.Match(html,
@@ -216,6 +285,86 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
             () => RenderAsync(modules, "/Views/Training/Index.cshtml"));
 
         Assert.Equal("A completed module must have a recorded completion date.", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(false, "Retake end of module test", "/training/module-one/content/test")]
+    [InlineData(true, "View previous test result", "/training/module-one/assessment-result")]
+    public async Task InProgressModuleOffersActionForGradedAssessment(bool passed, string label, string destination)
+    {
+        var attempt = new AssessmentAttempt(1, "module-one", DateTimeOffset.UtcNow);
+        attempt.AddOrReplaceAnswer("question", ["1"], passed);
+        attempt.Grade(1, DateTimeOffset.UtcNow);
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule(), "in-progress", 4) { LatestAssessment = attempt }
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains(label, ModuleListSection(html, "started"));
+        Assert.Contains($"href=\"{destination}\"", html);
+        Assert.Contains("href=\"/training/module-one\"", html);
+        Assert.DoesNotContain(passed ? "Retake end of module test" : "View previous test result", html);
+    }
+
+    [Fact]
+    public async Task UngradedAssessmentDoesNotOfferResultOrRetake()
+    {
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule(), "in-progress", 4)
+            {
+                LatestAssessment = new AssessmentAttempt(1, "module-one", DateTimeOffset.UtcNow)
+            }
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.DoesNotContain("Retake end of module test", html);
+        Assert.DoesNotContain("View previous test result", html);
+    }
+
+    [Theory]
+    [InlineData("available")]
+    [InlineData("completed")]
+    public async Task AssessmentActionsAreRestrictedToInProgressModules(string state)
+    {
+        var attempt = new AssessmentAttempt(1, "module-one", DateTimeOffset.UtcNow);
+        attempt.AddOrReplaceAnswer("question", ["1"], false);
+        attempt.Grade(1, DateTimeOffset.UtcNow);
+        TrainingModuleViewModel[] modules =
+        [
+            new(OverviewModule(), state, 4)
+            {
+                LatestAssessment = attempt,
+                CompletedAt = state == "completed" ? DateTimeOffset.UtcNow : null
+            }
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.DoesNotContain("Retake end of module test", html);
+        Assert.DoesNotContain("View previous test result", html);
+        Assert.Equal(state == "completed", html.Contains("View certificate", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FailedModuleWithoutTestIntroductionLinksToFirstTestQuestion()
+    {
+        var attempt = new AssessmentAttempt(1, "module-one", DateTimeOffset.UtcNow);
+        attempt.Grade(1, DateTimeOffset.UtcNow);
+        var module = OverviewModule();
+        TrainingModuleViewModel[] modules =
+        [
+            new(module with { Pages = module.Pages.Where(page => page.PageType != "assessment_intro").ToArray() },
+                "in-progress", 4) { LatestAssessment = attempt }
+        ];
+
+        var html = await RenderAsync(modules, "/Views/Training/Index.cshtml");
+
+        Assert.Contains("Retake end of module test", html);
+        Assert.Contains("href=\"/training/module-one/content/test-question\"", html);
     }
 
     [Fact]

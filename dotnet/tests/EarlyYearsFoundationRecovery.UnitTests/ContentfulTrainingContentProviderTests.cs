@@ -11,6 +11,45 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class ContentfulTrainingContentProviderTests
 {
+    [Fact]
+    public async Task MapsUpcomingTextForNamedModuleWithoutPublishedPages()
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        var fields = response["items"]![0]!["fields"]!;
+        fields["pages"] = new JsonArray();
+        fields["upcoming"] = new JsonObject { ["en-US"] = "Learn about individual needs in a future module." };
+
+        var module = await MapModuleResponseAsync(response.ToJsonString());
+
+        Assert.True(module.IsDraft);
+        Assert.Empty(module.Pages);
+        Assert.Equal("Learn about individual needs in a future module.", module.Upcoming);
+        Assert.Equal("module-one", module.Name);
+    }
+
+    [Fact]
+    public async Task MissingUpcomingTextDoesNotMakeWorkingModuleUnavailable()
+    {
+        var module = await MapModuleResponseAsync(ContentfulResponse);
+
+        Assert.Empty(module.Upcoming);
+        Assert.False(module.IsDraft);
+    }
+
+    [Fact]
+    public async Task UnresolvedPageReferencesKeepFutureModuleUnavailable()
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        response["includes"]!["Entry"] = new JsonArray();
+        response["items"]![0]!["fields"]!["upcoming"] = "Planned module.";
+
+        var module = await MapModuleResponseAsync(response.ToJsonString());
+
+        Assert.True(module.IsDraft);
+        Assert.Empty(module.Pages);
+        Assert.Equal("Planned module.", module.Upcoming);
+    }
+
     [Theory]
     [InlineData("description")]
     [InlineData("outcomes")]

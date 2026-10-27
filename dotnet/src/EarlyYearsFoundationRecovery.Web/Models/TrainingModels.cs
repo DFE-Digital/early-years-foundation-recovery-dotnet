@@ -11,6 +11,7 @@ public sealed record CertificateViewModel(string ModuleName, CertificateData Cer
 public sealed record TrainingModuleViewModel(TrainingModule Module, string State, int VisitedPageCount)
 {
     public DateTimeOffset? CompletedAt { get; init; }
+    public AssessmentAttempt? LatestAssessment { get; init; }
 }
 
 public sealed record TrainingModuleDetailViewModel(

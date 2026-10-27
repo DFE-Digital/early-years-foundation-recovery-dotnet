@@ -54,7 +54,8 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
         return new TrainingModule(name, title, position, isDraft, pages,
             ContentfulDeliveryClient.StringField(fields, "criteria", entries),
             ContentfulDeliveryClient.StringField(fields, "description", entries),
-            ContentfulDeliveryClient.StringField(fields, "outcomes", entries));
+            ContentfulDeliveryClient.StringField(fields, "outcomes", entries),
+            ContentfulDeliveryClient.StringField(fields, "upcoming", entries));
     }
 
     private static TrainingPage MapPage(JsonElement entry, IReadOnlyList<JsonElement> entries)

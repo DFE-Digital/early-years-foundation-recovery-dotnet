@@ -2,10 +2,12 @@
 @{
     ViewData["Title"] = "My modules";
     var allCompleted = Model.Count > 0 && Model.All(item => item.State == "completed");
+    var allAvailableCompleted = Model.Count > 0 && Model.All(item => item.State is "completed" or "upcoming");
     var groups = new[]
     {
         (State: "in-progress", Id: "started", Heading: "Modules in progress"),
         (State: "available", Id: "available", Heading: "Available modules"),
+        (State: "upcoming", Id: "upcoming", Heading: "Future modules in this course"),
         (State: "completed", Id: "completed", Heading: "Completed modules")
     };
 }
@@ -24,7 +26,9 @@ else
     @foreach (var group in groups)
     {
         var modules = Model.Where(item => item.State == group.State).OrderBy(item => item.Module.Position).ToArray();
-        if (modules.Length == 0 && (group.State != "in-progress" || allCompleted))
+        var showEmptyGroup = !allCompleted && (group.State == "in-progress" ||
+            (group.State == "available" && allAvailableCompleted));
+        if (modules.Length == 0 && !showEmptyGroup)
         {
             continue;
         }
@@ -32,7 +36,11 @@ else
             <h2 id="@group.Id-heading">@group.Heading</h2>
             @if (modules.Length == 0)
             {
-                @if (Model.Any(item => item.State == "completed"))
+                @if (group.State == "available")
+                {
+                    <p>You do not have any modules available.</p>
+                }
+                else if (Model.Any(item => item.State == "completed"))
                 {
                     <p>You have not started any modules. Please choose an available module.</p>
                 }
@@ -40,6 +48,21 @@ else
                 {
                     <p>You have not started any modules. To begin the training course, start an available module.</p>
                 }
+            }
+            else if (group.State == "upcoming")
+            {
+                <ul class="module-list">
+                    @foreach (var item in modules)
+                    {
+                        <li class="module-card">
+                            <h3>Coming soon - Module @item.Module.Position: @item.Module.Title</h3>
+                            @if (!string.IsNullOrWhiteSpace(item.Module.Upcoming))
+                            {
+                                <p>@item.Module.Upcoming</p>
+                            }
+                        </li>
+                    }
+                </ul>
             }
             else if (group.State == "completed")
             {
@@ -77,6 +100,20 @@ else
                             @if (item.Module.Pages.Count > 0)
                             {
                                 <p>@item.VisitedPageCount of @item.Module.Pages.Count pages visited</p>
+                            }
+                            @if (item.State == "in-progress" && item.LatestAssessment?.CompletedAt is not null)
+                            {
+                                @if (item.LatestAssessment.Passed == false)
+                                {
+                                    var retakePage = item.Module.Pages.FirstOrDefault(page => page.PageType == "assessment_intro")
+                                        ?? item.Module.Pages.FirstOrDefault(page => page.PageType == "summative")
+                                        ?? throw new InvalidOperationException("A failed assessment must have a test page.");
+                                    <p><a asp-action="Page" asp-route-moduleName="@item.Module.Name" asp-route-pageName="@retakePage.Name">Retake end of module test</a></p>
+                                }
+                                else if (item.LatestAssessment.Passed == true)
+                                {
+                                    <p><a asp-action="AssessmentResult" asp-route-moduleName="@item.Module.Name">View previous test result</a></p>
+                                }
                             }
                         </li>
                     }
