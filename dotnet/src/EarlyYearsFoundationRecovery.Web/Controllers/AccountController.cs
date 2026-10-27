@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EarlyYearsFoundationRecovery.Application.Accounts;
+using EarlyYearsFoundationRecovery.Application.Contracts;
 using EarlyYearsFoundationRecovery.Domain.Accounts;
 using EarlyYearsFoundationRecovery.Web.Models;
 using Microsoft.AspNetCore.Authentication;
@@ -13,7 +14,8 @@ namespace EarlyYearsFoundationRecovery.Web.Controllers;
 [Route("account")]
 public sealed class AccountController(
     AccountService accounts,
-    IWebHostEnvironment environment) : Controller
+    IWebHostEnvironment environment,
+    IRegistrationOptionsProvider options) : Controller
 {
     [AllowAnonymous]
     [HttpGet("sign-in")]
@@ -60,6 +62,193 @@ public sealed class AccountController(
     {
         var account = await GetCurrentAccountAsync(cancellationToken);
         return account is null ? NotFound() : View(account);
+    }
+
+    [Authorize]
+    [HttpGet("name")]
+    public async Task<IActionResult> Name(CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        ViewData["IsAccountEdit"] = true;
+        return View("../Registration/Name", new NameModel
+        {
+            FirstName = account.FirstName ?? string.Empty,
+            LastName = account.LastName ?? string.Empty
+        });
+    }
+
+    [Authorize]
+    [HttpPost("name")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Name(NameModel model, CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        if (!ModelState.IsValid)
+        {
+            ViewData["IsAccountEdit"] = true;
+            return View("../Registration/Name", model);
+        }
+        await accounts.UpdateNameAsync(account, model.FirstName, model.LastName, cancellationToken);
+        TempData["Status"] = "You have updated your details.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize]
+    [HttpGet("email-preferences")]
+    public Task<IActionResult> EmailPreferences(CancellationToken cancellationToken) =>
+        EditPreferenceAsync(false, cancellationToken);
+
+    [Authorize]
+    [HttpGet("location")]
+    public async Task<IActionResult> Location(CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        var model = new AccountLocationModel
+        {
+            Country = options.GetCountries().SingleOrDefault(item => item.Name == account.Country)?.Id ?? string.Empty,
+            LocalAuthority = options.GetLocalAuthorities()
+                .SingleOrDefault(item => item.Name == account.LocalAuthority)?.Id
+        };
+        PopulateLocationChoices(model, account);
+        return View(model);
+    }
+
+    [Authorize]
+    [HttpPost("location")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Location(AccountLocationModel model, CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        PopulateLocationChoices(model, account);
+        var country = model.Countries.SingleOrDefault(item => item.Id == model.Country);
+        if (country is null)
+        {
+            ModelState.AddModelError(nameof(model.Country), "Select a valid country.");
+        }
+        var needsAuthority = account.SettingRequiresLocalAuthority && country?.Name == "England";
+        var authority = needsAuthority
+            ? model.LocalAuthorities.SingleOrDefault(item => item.Id == model.LocalAuthority)
+            : null;
+        if (needsAuthority && authority is null)
+        {
+            ModelState.AddModelError(nameof(model.LocalAuthority), "Select a valid local authority.");
+        }
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+        await accounts.UpdateLocationAsync(account,
+            country?.Name ?? throw new InvalidOperationException("A valid country is required."),
+            authority?.Name, cancellationToken);
+        TempData["Status"] = "You have updated your details.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private void PopulateLocationChoices(AccountLocationModel model, UserAccount account)
+    {
+        model.Countries = options.GetCountries();
+        model.LocalAuthorities = options.GetLocalAuthorities();
+        model.SettingRequiresLocalAuthority = account.SettingRequiresLocalAuthority;
+    }
+
+    [Authorize]
+    [HttpPost("email-preferences")]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> EmailPreferences(AccountPreferenceModel model, CancellationToken cancellationToken) =>
+        SavePreferenceAsync(model, false, cancellationToken);
+
+    [Authorize]
+    [HttpGet("research-preferences")]
+    public Task<IActionResult> ResearchPreferences(CancellationToken cancellationToken) =>
+        EditPreferenceAsync(true, cancellationToken);
+
+    [Authorize]
+    [HttpPost("research-preferences")]
+    [ValidateAntiForgeryToken]
+    public Task<IActionResult> ResearchPreferences(AccountPreferenceModel model, CancellationToken cancellationToken) =>
+        SavePreferenceAsync(model, true, cancellationToken);
+
+    private async Task<IActionResult> EditPreferenceAsync(bool research, CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        ViewData["IsResearchPreference"] = research;
+        return View("Preference", new AccountPreferenceModel
+        {
+            Selected = research ? account.ResearchParticipant : account.TrainingEmails
+        });
+    }
+
+    private async Task<IActionResult> SavePreferenceAsync(
+        AccountPreferenceModel model, bool research, CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        if (model.Selected is null && !ModelState.ContainsKey(nameof(model.Selected)))
+        {
+            ModelState.AddModelError(nameof(model.Selected), "Select yes or no.");
+        }
+        if (!ModelState.IsValid)
+        {
+            ViewData["IsResearchPreference"] = research;
+            return View("Preference", model);
+        }
+        var selected = model.Selected ?? throw new InvalidOperationException("A preference selection is required.");
+        var trainingEmails = research
+            ? account.TrainingEmails ?? throw new InvalidOperationException("A registered account must have an email preference.")
+            : selected;
+        var researchParticipant = research
+            ? selected
+            : account.ResearchParticipant ?? throw new InvalidOperationException("A registered account must have a research preference.");
+        await accounts.UpdatePreferencesAsync(account, trainingEmails, researchParticipant, cancellationToken);
+        TempData["Status"] = "You have updated your details.";
+        return RedirectToAction(nameof(Index));
     }
 
     [Authorize]

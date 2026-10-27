@@ -1,0 +1,20 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AccountPreferenceModel
+@{
+    var research = ViewData["IsResearchPreference"] is true;
+    ViewData["Title"] = research ? "Change research preferences" : "Change email preferences";
+    var question = research
+        ? "Would you like to take part in research about the training?"
+        : "Can we email you about your training?";
+}
+<h1>@ViewData["Title"]</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-controller="Account" asp-action="@(research ? "ResearchPreferences" : "EmailPreferences")" method="post">
+    <fieldset class="form-group">
+        <legend>@question</legend>
+        <label class="radio-label"><input type="radio" asp-for="Selected" id="preference-yes" value="true" /> Yes</label>
+        <label class="radio-label"><input type="radio" asp-for="Selected" id="preference-no" value="false" /> No</label>
+        <span asp-validation-for="Selected" class="field-error"></span>
+    </fieldset>
+    <button class="button" type="submit">Save</button>
+</form>
+<p><a asp-controller="Account" asp-action="Index">Cancel</a></p>

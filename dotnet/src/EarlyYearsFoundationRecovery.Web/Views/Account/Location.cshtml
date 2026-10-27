@@ -1,0 +1,36 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AccountLocationModel
+@{
+    ViewData["Title"] = "Change where you live";
+}
+<h1>Change where you live</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-controller="Account" asp-action="Location" method="post">
+    <div class="form-group">
+        <label asp-for="Country">Country</label>
+        <select asp-for="Country" class="select-input">
+            <option value="">Select a country</option>
+            @foreach (var country in Model.Countries)
+            {
+                <option value="@country.Id">@country.Name</option>
+            }
+        </select>
+        <span asp-validation-for="Country" class="field-error"></span>
+    </div>
+    @if (Model.SettingRequiresLocalAuthority)
+    {
+        <div class="form-group">
+            <label asp-for="LocalAuthority">Local authority</label>
+            <p id="authority-hint">If you live in England, select the local authority your setting is in. Otherwise, leave this blank.</p>
+            <select asp-for="LocalAuthority" class="select-input" aria-describedby="authority-hint">
+                <option value="">Select a local authority</option>
+                @foreach (var authority in Model.LocalAuthorities)
+                {
+                    <option value="@authority.Id">@authority.Name</option>
+                }
+            </select>
+            <span asp-validation-for="LocalAuthority" class="field-error"></span>
+        </div>
+    }
+    <button class="button" type="submit">Save</button>
+</form>
+<p><a asp-controller="Account" asp-action="Index">Cancel</a></p>

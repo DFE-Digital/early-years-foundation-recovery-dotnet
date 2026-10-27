@@ -23,6 +23,125 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         _factory = factory;
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AccountLocationFormProvidesReferenceChoicesSaveAndCancel(bool needsAuthority)
+    {
+        var html = await RenderAsync(new AccountLocationModel
+        {
+            Country = "england", LocalAuthority = "example", SettingRequiresLocalAuthority = needsAuthority,
+            Countries = [new("england", "England")],
+            LocalAuthorities = [new("example", "Example council")]
+        }, "/Views/Account/Location.cshtml");
+
+        Assert.Contains("action=\"/account/location\"", html);
+        Assert.Matches("<option(?=[^>]*value=\"england\")(?=[^>]*selected=\"selected\")[^>]*>", html);
+        Assert.Equal(needsAuthority, html.Contains("Example council", StringComparison.Ordinal));
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Contains(">Save</button>", html);
+        Assert.Contains("href=\"/account\">Cancel</a>", html);
+    }
+
+    [Theory]
+    [InlineData(true, "England", "Example council")]
+    [InlineData(true, "Scotland", "Not applicable")]
+    [InlineData(false, "England", "Not applicable")]
+    public async Task AccountLocationSummaryShowsCountryAndApplicableAuthority(
+        bool requiresAuthority, string country, string expectedAuthority)
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateSetting("training", null, requiresAuthority, "none");
+        account.UpdateLocation(country, "Example council");
+        account.UpdatePreferences(false, false);
+        Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+
+        var html = await RenderAsync(account, "/Views/Account/Index.cshtml");
+
+        Assert.Contains($"<dd>{country}</dd>", html);
+        Assert.Contains($"<dd>{expectedAuthority}</dd>", html);
+        Assert.Contains("href=\"/account/location\"", html);
+    }
+
+    [Theory]
+    [InlineData(true, "/account/research-preferences", "research")]
+    [InlineData(false, "/account/email-preferences", "email")]
+    public async Task AccountPreferenceFormOffersExplicitChoiceSaveAndCancel(bool research, string action, string heading)
+    {
+        var html = await RenderAsync(new AccountPreferenceModel { Selected = false },
+            "/Views/Account/Preference.cshtml", researchPreference: research);
+
+        Assert.Contains($"action=\"{action}\"", html);
+        Assert.Contains(heading, html);
+        Assert.Contains("value=\"true\"", html);
+        Assert.Contains("value=\"false\"", html);
+        Assert.Contains("checked=\"checked\"", html);
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Contains(">Save</button>", html);
+        Assert.Contains("href=\"/account\">Cancel</a>", html);
+        Assert.Contains("<legend>", html);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AccountPageDisplaysIndependentPreferencesAndEditLinks(bool selected)
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.UpdatePreferences(selected, !selected);
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateLocation("Scotland", null);
+        account.UpdateSetting("other", "Example", false, "none");
+        Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+
+        var html = await RenderAsync(account, "/Views/Account/Index.cshtml");
+
+        Assert.Contains("href=\"/account/email-preferences\"", html);
+        Assert.Contains("href=\"/account/research-preferences\"", html);
+        Assert.Contains(selected ? "You have chosen to receive emails" : "You have chosen not to receive emails", html);
+        Assert.Contains(selected ? "You have chosen not to participate in research." : "You have chosen to participate in research.", html);
+    }
+
+    [Theory]
+    [InlineData(true, "/account/name", "Save")]
+    [InlineData(false, "/registration/name", "Continue")]
+    public async Task NameFormUsesSeparateAccountAndRegistrationJourneys(bool accountEdit, string action, string button)
+    {
+        var html = await RenderAsync(new NameModel { FirstName = "Alex", LastName = "Example" },
+            "/Views/Registration/Name.cshtml", accountEdit);
+
+        Assert.Contains($"action=\"{action}\"", html);
+        Assert.Contains($">{button}</button>", html);
+        Assert.Contains("value=\"Alex\"", html);
+        Assert.Contains("autocomplete=\"given-name\"", html);
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Equal(accountEdit, html.Contains("Cancel", StringComparison.Ordinal));
+        if (accountEdit)
+        {
+            Assert.Contains("href=\"/account\"", html);
+            Assert.Contains("certificate", html);
+            Assert.Contains("GOV.UK One Login", html);
+        }
+    }
+
+    [Fact]
+    public async Task AccountNameLinkUsesDedicatedEditRouteAndExplainsCertificateName()
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.UpdateName("Alex", "Example");
+
+        var html = await RenderAsync(account, "/Views/Account/Index.cshtml");
+
+        Assert.Contains("href=\"/account/name\"", html);
+        Assert.Contains("Change name", html);
+        Assert.DoesNotContain("href=\"/registration/name\"", html);
+        Assert.Contains("certificate", html);
+        Assert.Contains("GOV.UK One Login", html);
+    }
+
     [Fact]
     public async Task ModuleListGroupsLearningStatesAndOrdersModulesWithinEachGroup()
     {
@@ -980,7 +1099,8 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     }
 
     private async Task<string> RenderAsync<TModel>(
-        TModel model, string viewPath = "/Views/Training/AssessmentResult.cshtml")
+        TModel model, string viewPath = "/Views/Training/AssessmentResult.cshtml", bool accountEdit = false,
+        bool researchPreference = false)
     {
         using var scope = _factory.Services.CreateScope();
         var services = scope.ServiceProvider;
@@ -998,6 +1118,8 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         using var writer = new StringWriter();
         var viewData = new ViewDataDictionary<TModel>(
             services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
+        viewData["IsAccountEdit"] = accountEdit;
+        viewData["IsResearchPreference"] = researchPreference;
         var viewContext = new ViewContext(actionContext, result.View, viewData,
             new TempDataDictionary(http, services.GetRequiredService<ITempDataProvider>()),
             writer, new HtmlHelperOptions());

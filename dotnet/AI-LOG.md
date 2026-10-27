@@ -415,6 +415,108 @@ This log is included in that commit; Git history supplies its resulting hash.
 Latest full Release result: **232 passed**; whitespace checks passed. No push
 requested. Full Rails release-integrity classification remains outstanding.
 
+### Checkpoint 12: account name, preferences and location editing
+
+**User objective:** continue after the module-list checkpoint. A choice between
+account editing and stricter release checks could not be answered because the user
+was unavailable; chose the bounded name-edit gap without tightening module access.
+
+The existing Change link sent registered learners through registration and onward
+to location. Added authenticated GET/POST `/account/name` using the existing name
+model, account service and shared registration form. Account mode prefills saved
+values, offers Save/Cancel and certificate/One Login guidance, and returns to
+My account with confirmation after saving. Missing accounts return Not Found;
+unregistered learners return to registration. Registration mode retains Continue
+and its existing next step. No schema or identity-provider update was introduced.
+
+**Red before green:** six of seven controller/actual-Razor checks failed before
+implementation; the missing-account check already passed against the endpoint
+skeleton. Corrected misplaced controller edits caught by compilation during
+implementation. Full Release suite: **239 passed**. Editor diagnostics and
+whitespace checks passed.
+
+**Manual evidence:** live HTTP submissions rejected whitespace-only and overlong
+names with field errors, accepted the existing unchanged name and redirected to
+My account with confirmation, and rejected a missing anti-forgery token with 400.
+Reopening the form showed the same saved name. Registration still posts to its
+own name route with Continue. Account edit had no overflow at 375px; app/database
+health remained healthy. These were HTTP fetch checks through the authenticated
+browser, not a claimed successful UI click journey.
+
+**Local data:** saved the development learner's existing name unchanged; no
+training progress, answers or new starts were recorded. Updated README and A07,
+which remains Partial for location, setting, role and preference edits.
+Changes remain uncommitted; nothing pushed.
+
+#### Independent email and research preference editing
+
+Continued the uncommitted account checkpoint with separate email/research edit
+routes, matching Rails' independent preference journeys. My account now displays
+both saved choices and change links for registered learners. A shared single-
+preference form/model prefills yes/no, requires a choice and offers Save/Cancel.
+Each update preserves the other saved preference through the existing account
+service. Authentication, registration, current-account and anti-forgery guards
+apply. Registration's combined preference form/navigation is unchanged.
+
+**Red before green:** all four initial actual-Razor preference cases failed before
+implementation. Added controller cases for both values on both preferences,
+preserving the opposite value, missing selections and registered-account guards.
+Full Release suite: **251 passed**. Editor diagnostics and whitespace checks passed.
+
+**Manual evidence:** authenticated HTTP checks on both routes showed errors for
+missing/malformed selections, successful unchanged-value saves returning to
+My account with confirmation, persisted unchanged selections and 400 for missing
+anti-forgery tokens. Research form radio IDs are unique, Cancel targets My account,
+and no overflow was measured at 375px. App/database health remained healthy.
+These are HTTP/rendering checks, not a claimed UI click test.
+
+**Local data:** saved the development learner's existing email/research choices
+unchanged. No training answers, progress or new starts were recorded.
+Updated README/A07; location/setting/role account edits remain outstanding.
+Changes remain uncommitted; nothing pushed.
+
+#### Account country and local-authority editing
+
+Continued the same uncommitted checkpoint with account location display/editing.
+Rails saves country then redirects through setting-edit steps. A clarification
+request about a combined save could not be answered because the user was
+unavailable; chose a bounded atomic country/authority edit rather than leaving
+an already-registered account without a newly required English authority.
+This UX difference is documented and still needs human review.
+
+Added `/account/location` GET/POST and a dedicated form backed by the existing
+registration reference provider. Saved names map to IDs for prefill. Validation
+uses the persisted setting requirement, never the submitted flag; invalid choices
+leave both saved values unchanged. Non-English or non-required authority data is
+cleared on save. Setting/role fields, registration completion and registration
+navigation are unchanged. My account shows country and the applicable authority
+or Not applicable. Save returns with confirmation; Cancel does not submit.
+
+**Red before green:** all nine initial controller/actual-Razor cases failed before
+implementation. Corrected an assertion that assumed HTML attribute ordering, then
+added three account-summary cases. Full Release suite: **263 passed**. Editor
+diagnostics and whitespace checks passed.
+
+**Manual evidence:** live HTTP checks rejected a missing required authority even
+with a forged false requirement flag, rejected an invalid country, accepted an
+unchanged-value save returning to My account with confirmation and rejected a
+missing anti-forgery token with 400. Reopening retained both selections. Account
+summary displayed England/York and its edit link. No overflow at 375px;
+app/database health remained healthy. These are HTTP/rendering checks, not a
+claimed UI click journey.
+
+**Local data:** saved the development learner's existing country and authority
+unchanged; no training answers, progress or new starts were recorded.
+Updated README/A07; setting/role edits and full account acceptance remain
+outstanding. Changes remain uncommitted; nothing pushed.
+
+**Checkpoint:** the user requested a checkpoint of these three account slices.
+Commit message: Add account name preference and location editing.
+This log is included in that commit; Git history supplies its resulting hash.
+Latest full Release result: **263 passed**; whitespace checks passed.
+Nothing pushed. Setting/role editing and human review of the combined location
+form remain outstanding.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

@@ -10,11 +10,285 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using System.Security.Claims;
 using EarlyYearsFoundationRecovery.Web.Content;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.FileProviders;
 
 namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class TrainingJourneyServiceTests
 {
+    [Fact]
+    public async Task AccountLocationPrefillsReferenceIdsAndSavesCountryAndAuthorityTogether()
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("nursery", null, true, "none");
+        account.UpdateLocation("England", "Example council");
+        var before = Assert.IsType<ViewResult>(await controller.Location(CancellationToken.None));
+        var model = Assert.IsType<AccountLocationModel>(before.Model);
+        Assert.Equal("england", model.Country);
+        Assert.Equal("example", model.LocalAuthority);
+        Assert.True(model.SettingRequiresLocalAuthority);
+
+        var result = await controller.Location(
+            new AccountLocationModel { Country = "england", LocalAuthority = "other" }, CancellationToken.None);
+
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(result).ActionName);
+        Assert.Equal("England", account.Country);
+        Assert.Equal("Other council", account.LocalAuthority);
+        Assert.Equal("nursery", account.SettingType);
+        Assert.Equal("You have updated your details.", controller.TempData["Status"]);
+    }
+
+    [Theory]
+    [InlineData("england", null)]
+    [InlineData("england", "unknown")]
+    [InlineData("unknown", "example")]
+    public async Task InvalidAccountLocationLeavesBothSavedValuesUntouched(string country, string? authority)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("nursery", null, true, "none");
+        account.UpdateLocation("Scotland", null);
+        var input = new AccountLocationModel { Country = country, LocalAuthority = authority };
+
+        var result = Assert.IsType<ViewResult>(await controller.Location(input, CancellationToken.None));
+
+        Assert.Same(input, result.Model);
+        Assert.NotEmpty(input.Countries);
+        Assert.NotEmpty(input.LocalAuthorities);
+        Assert.True(input.SettingRequiresLocalAuthority);
+        Assert.False(controller.ModelState.IsValid);
+        Assert.Equal("Scotland", account.Country);
+        Assert.Null(account.LocalAuthority);
+    }
+
+    [Theory]
+    [InlineData(true, "scotland")]
+    [InlineData(false, "england")]
+    public async Task AccountLocationClearsAuthorityWhenNotApplicable(bool requiresAuthority, string country)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("nursery", null, true, "none");
+        account.UpdateLocation("England", "Example council");
+        if (!requiresAuthority)
+        {
+            account.UpdateSetting("training", null, false, "none");
+        }
+
+        var result = await controller.Location(new AccountLocationModel
+        {
+            Country = country, LocalAuthority = "forged", SettingRequiresLocalAuthority = !requiresAuthority
+        }, CancellationToken.None);
+
+        Assert.IsType<RedirectToActionResult>(result);
+        Assert.Null(account.LocalAuthority);
+        Assert.Equal(country == "england" ? "England" : "Scotland", account.Country);
+    }
+
+    [Fact]
+    public async Task AccountLocationRequiresRegisteredCurrentAccount()
+    {
+        var (controller, _) = AccountNameController(registered: false);
+        var input = new AccountLocationModel { Country = "scotland" };
+        foreach (var result in new[]
+        {
+            await controller.Location(CancellationToken.None),
+            await controller.Location(input, CancellationToken.None)
+        })
+        {
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Terms", redirect.ActionName);
+            Assert.Equal("Registration", redirect.ControllerName);
+        }
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        Assert.IsType<NotFoundResult>(await controller.Location(CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Location(input, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task AccountPreferencesSaveIndependentlyAndReturnToAccount(bool research, bool selected)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdatePreferences(!selected, !selected);
+        var before = Assert.IsType<ViewResult>(research
+            ? await controller.ResearchPreferences(CancellationToken.None)
+            : await controller.EmailPreferences(CancellationToken.None));
+        Assert.Equal(!selected, Assert.IsType<AccountPreferenceModel>(before.Model).Selected);
+        var model = new AccountPreferenceModel { Selected = selected };
+
+        var result = research
+            ? await controller.ResearchPreferences(model, CancellationToken.None)
+            : await controller.EmailPreferences(model, CancellationToken.None);
+
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(result).ActionName);
+        Assert.Equal(research ? !selected : selected, account.TrainingEmails);
+        Assert.Equal(research ? selected : !selected, account.ResearchParticipant);
+        Assert.Equal("You have updated your details.", controller.TempData["Status"]);
+        Assert.True(account.IsRegistrationComplete);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AccountPreferencesRequireExplicitChoiceAndPreserveSavedValues(bool research)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdatePreferences(true, false);
+        var model = new AccountPreferenceModel();
+
+        var result = Assert.IsType<ViewResult>(research
+            ? await controller.ResearchPreferences(model, CancellationToken.None)
+            : await controller.EmailPreferences(model, CancellationToken.None));
+
+        Assert.Same(model, result.Model);
+        Assert.Equal(research, result.ViewData["IsResearchPreference"]);
+        Assert.False(controller.ModelState.IsValid);
+        Assert.True(account.TrainingEmails);
+        Assert.False(account.ResearchParticipant);
+        Assert.False(controller.TempData.ContainsKey("Status"));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AccountPreferenceRoutesRequireRegisteredCurrentAccount(bool research)
+    {
+        var (controller, _) = AccountNameController(registered: false);
+        var get = research ? await controller.ResearchPreferences(CancellationToken.None)
+            : await controller.EmailPreferences(CancellationToken.None);
+        var post = research
+            ? await controller.ResearchPreferences(new AccountPreferenceModel { Selected = true }, CancellationToken.None)
+            : await controller.EmailPreferences(new AccountPreferenceModel { Selected = true }, CancellationToken.None);
+        foreach (var result in new[] { get, post })
+        {
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Terms", redirect.ActionName);
+            Assert.Equal("Registration", redirect.ControllerName);
+        }
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        Assert.IsType<NotFoundResult>(research ? await controller.ResearchPreferences(CancellationToken.None)
+            : await controller.EmailPreferences(CancellationToken.None));
+        Assert.IsType<NotFoundResult>(research
+            ? await controller.ResearchPreferences(new AccountPreferenceModel(), CancellationToken.None)
+            : await controller.EmailPreferences(new AccountPreferenceModel(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AccountNameEditPrefillsSavedNameAndReturnsToAccountAfterSaving()
+    {
+        var (controller, account) = AccountNameController();
+        var before = Assert.IsType<ViewResult>(await controller.Name(CancellationToken.None));
+        var model = Assert.IsType<NameModel>(before.Model);
+        Assert.Equal("Alex", model.FirstName);
+        Assert.Equal("Example", model.LastName);
+
+        var saved = Assert.IsType<RedirectToActionResult>(await controller.Name(
+            new NameModel { FirstName = "  Updated  ", LastName = "  Learner  " }, CancellationToken.None));
+
+        Assert.Equal("Index", saved.ActionName);
+        Assert.Equal("Updated", account.FirstName);
+        Assert.Equal("Learner", account.LastName);
+        Assert.True(account.IsRegistrationComplete);
+        Assert.Equal("You have updated your details.", controller.TempData["Status"]);
+        var revisited = Assert.IsType<ViewResult>(await controller.Name(CancellationToken.None));
+        Assert.Equal("Updated", Assert.IsType<NameModel>(revisited.Model).FirstName);
+    }
+
+    [Fact]
+    public async Task InvalidAccountNameEditPreservesInputWithoutChangingSavedName()
+    {
+        var (controller, account) = AccountNameController();
+        controller.ModelState.AddModelError("FirstName", "The FirstName field is required.");
+        var input = new NameModel { FirstName = "", LastName = "Changed" };
+
+        var result = Assert.IsType<ViewResult>(await controller.Name(input, CancellationToken.None));
+
+        Assert.Same(input, result.Model);
+        Assert.Equal(true, result.ViewData["IsAccountEdit"]);
+        Assert.Equal("Alex", account.FirstName);
+        Assert.Equal("Example", account.LastName);
+        Assert.False(controller.TempData.ContainsKey("Status"));
+    }
+
+    [Fact]
+    public async Task AccountNameEditingRedirectsUnregisteredLearnersToRegistration()
+    {
+        var (controller, _) = AccountNameController(registered: false);
+        foreach (var result in new[]
+        {
+            await controller.Name(CancellationToken.None),
+            await controller.Name(new NameModel { FirstName = "New", LastName = "Name" }, CancellationToken.None)
+        })
+        {
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Registration", redirect.ControllerName);
+            Assert.Equal("Terms", redirect.ActionName);
+        }
+    }
+
+    [Fact]
+    public async Task AccountNameEditingRequiresCurrentAccount()
+    {
+        var (controller, _) = AccountNameController();
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+
+        Assert.IsType<NotFoundResult>(await controller.Name(CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Name(new NameModel(), CancellationToken.None));
+    }
+
+    private static (AccountController Controller, UserAccount Account) AccountNameController(bool registered = true)
+    {
+        var account = new UserAccount("subject-1", "person@example.test");
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateLocation("Scotland", null);
+        account.UpdateSetting("other", "Example setting", false, "none");
+        account.UpdatePreferences(false, false);
+        if (registered)
+        {
+            Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+        }
+        var controller = new AccountController(
+            new AccountService(new InMemoryAccountStore(account), new InMemoryNoteStore(), TimeProvider.System),
+            new TestWebHostEnvironment(), new AccountTestOptions())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "subject-1")], "test"))
+                }
+            }
+        };
+        controller.TempData = new TempDataDictionary(controller.HttpContext, new InMemoryTempDataProvider());
+        return (controller, account);
+    }
+
+    private sealed class TestWebHostEnvironment : IWebHostEnvironment
+    {
+        public string ApplicationName { get; set; } = "Tests";
+        public string EnvironmentName { get; set; } = "Development";
+        public string ContentRootPath { get; set; } = "";
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+        public string WebRootPath { get; set; } = "";
+        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed class AccountTestOptions : IRegistrationOptionsProvider
+    {
+        public IReadOnlyList<RegistrationChoice> GetCountries() =>
+            [new("england", "England"), new("scotland", "Scotland")];
+        public IReadOnlyList<RegistrationChoice> GetLocalAuthorities() =>
+            [new("example", "Example council"), new("other", "Other council")];
+        public IReadOnlyList<RegistrationChoice> GetExperiences() => [];
+        public IReadOnlyList<RegistrationChoice> GetRoles(string roleGroup) => [];
+        public Task<IReadOnlyList<RegistrationSetting>> GetSettingsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RegistrationSetting>>([]);
+    }
+
     [Fact]
     public async Task DraftModulesAppearAsUpcomingWithoutExposingTrainingRoutes()
     {

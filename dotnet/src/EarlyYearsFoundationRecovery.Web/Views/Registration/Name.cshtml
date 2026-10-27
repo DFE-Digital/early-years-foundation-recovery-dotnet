@@ -1,10 +1,16 @@
 @model EarlyYearsFoundationRecovery.Web.Models.NameModel
 @{
-    ViewData["Title"] = "Your name";
+    var isAccountEdit = ViewData["IsAccountEdit"] is true;
+    ViewData["Title"] = isAccountEdit ? "Change your name" : "Your name";
 }
-<h1>What is your name?</h1>
+<h1>@(isAccountEdit ? "Change your name" : "What is your name?")</h1>
+@if (isAccountEdit)
+{
+    <p>This is the name that will appear on your end of module certificate.</p>
+    <p>Changing your name on this account will not affect your GOV.UK One Login.</p>
+}
 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
-<form asp-action="Name" method="post">
+<form asp-controller="@(isAccountEdit ? "Account" : "Registration")" asp-action="Name" method="post">
     <div class="form-group">
         <label asp-for="FirstName">First name</label>
         <input asp-for="FirstName" autocomplete="given-name" class="text-input" />
@@ -15,5 +21,9 @@
         <input asp-for="LastName" autocomplete="family-name" class="text-input" />
         <span asp-validation-for="LastName" class="field-error"></span>
     </div>
-    <button class="button" type="submit">Continue</button>
+    <button class="button" type="submit">@(isAccountEdit ? "Save" : "Continue")</button>
 </form>
+@if (isAccountEdit)
+{
+    <p><a asp-controller="Account" asp-action="Index">Cancel</a></p>
+}

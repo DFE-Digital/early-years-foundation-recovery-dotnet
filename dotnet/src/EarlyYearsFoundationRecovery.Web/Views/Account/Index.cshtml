@@ -5,10 +5,29 @@
 <h1>My account</h1>
 <dl class="summary-list">
     <dt>Name</dt>
-    <dd>@Model.FirstName @Model.LastName <a asp-controller="Registration" asp-action="Name">Change</a></dd>
+    <dd>@Model.FirstName @Model.LastName <a asp-controller="Account" asp-action="Name">Change name</a></dd>
     <dt>Email address</dt>
     <dd>@Model.Email</dd>
     <dt>Registration</dt>
     <dd>@(Model.IsRegistrationComplete ? "Complete" : "In progress")</dd>
 </dl>
+<p>This is the name that will appear on your end of module certificate.</p>
+<p>Changing your name on this account will not affect your GOV.UK One Login.</p>
+@if (Model.IsRegistrationComplete)
+{
+    <h2>Where you live</h2>
+    <dl class="summary-list">
+        <dt>Country</dt>
+        <dd>@Model.Country</dd>
+        <dt>Local authority</dt>
+        <dd>@(Model.SettingRequiresLocalAuthority && Model.Country == "England" ? Model.LocalAuthority : "Not applicable")</dd>
+    </dl>
+    <p><a asp-controller="Account" asp-action="Location">Change where you live</a></p>
+    <h2>Email preferences</h2>
+    <p>@(Model.TrainingEmails == true ? "You have chosen to receive emails about this training course." : "You have chosen not to receive emails about this training course.")</p>
+    <p><a asp-controller="Account" asp-action="EmailPreferences">Change email preferences</a></p>
+    <h2>Research preferences</h2>
+    <p>@(Model.ResearchParticipant == true ? "You have chosen to participate in research." : "You have chosen not to participate in research.")</p>
+    <p><a asp-controller="Account" asp-action="ResearchPreferences">Change research preferences</a></p>
+}
 <p><a asp-controller="Account" asp-action="Close">Close your account</a></p>
