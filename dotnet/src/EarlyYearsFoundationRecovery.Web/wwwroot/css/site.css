@@ -159,6 +159,29 @@ h2 {
   line-height: 1.25;
 }
 
+.module-section {
+  border-bottom: 1px solid #b1b4b6;
+  padding-block: 8px 20px;
+}
+
+.module-section h3 {
+  margin-bottom: 8px;
+}
+
+.module-topics {
+  padding-left: 20px;
+}
+
+.module-topics li {
+  margin-block: 12px;
+}
+
+.topic-status {
+  display: block;
+  color: #505a5f;
+  font-size: 0.9rem;
+}
+
 .lead {
   max-width: 680px;
   font-size: 1.3rem;

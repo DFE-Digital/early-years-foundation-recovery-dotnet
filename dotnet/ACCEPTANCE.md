@@ -58,7 +58,7 @@ Rails references:
 | ID | Acceptance case | Status | Current evidence and remaining work |
 |---|---|---|---|
 | T01 | List released modules in order with appropriate available/in-progress/completed presentation | Partial | Real published modules load, state and ordering exist. [Index](src/EarlyYearsFoundationRecovery.Web/Views/Training/Index.cshtml) is a single list; Rails separates state groups and future releases. Resolve required release metadata and translate list cases. |
-| T02 | Overview shows module description, sections/topics, completion indicators and appropriate links | Missing | Current [overview](src/EarlyYearsFoundationRecovery.Web/Views/Training/Module.cshtml) is a flat list of all pages. Implement section structure, topic states, hidden pre-confidence/feedback sections and Rails link availability rules. |
+| T02 | Overview shows module description, sections/topics, completion indicators and appropriate links | Implemented | [Overview](src/EarlyYearsFoundationRecovery.Web/Views/Training/Module.cshtml) groups section/topic boundaries using [overview models](src/EarlyYearsFoundationRecovery.Web/Models/TrainingOverviewSection.cs), hides pre-confidence/feedback sections and individual questions, and computes progress/link availability from saved visit names and assessment/completion state. Module description, outcomes and criteria use sanitized Markdown/rich text, with optional-field omission. Focused mapping/controller/Razor tests and live checks of all eight published overviews pass. Full visual/accessibility and PostgreSQL acceptance remain separate gates. |
 | T03 | Resume normal learning; completed modules return to certificate; failed tests offer retake introduction | Implemented | [Journey tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingJourneyServiceTests.cs) and [Razor tests](tests/EarlyYearsFoundationRecovery.UnitTests/AssessmentSummaryRenderingTests.cs) cover state-aware CTAs and removed-page fallback. Verify alongside the new overview, including direct-URL visits. Do not infer direct-URL restrictions solely from disabled overview links. |
 | T04 | Viewing overview/pre-learning pages does not prematurely record module start | Implemented | Overview no longer writes a start; page views retain resume data independently. The service records start only for `sub_module_intro`; existing timestamps remain unchanged. Domain/service/controller regressions cover pre-confidence submission, direct page visits, listing state, revisits and legacy starts. Automated PostgreSQL lifecycle evidence remains part of Q02. |
 | T05 | Render supported content faithfully and safely, including feedback guidance and linked assets | Implemented | [Contentful mapping tests](tests/EarlyYearsFoundationRecovery.UnitTests/ContentfulTrainingContentProviderTests.cs) and [renderer tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingContentRendererTests.cs) cover rich text, assets, shortcodes and sanitization. Broader published-content coverage and unsupported rich-text layouts remain; see [supported limits](README.md). |
@@ -121,7 +121,9 @@ vulnerabilities or completed audits.
    Automated PostgreSQL lifecycle verification remains outstanding under Q02.
 2. **Overview structure and availability (T01, T02, T03).** Establish required CMS
    metadata, then translate Rails section/topic and CTA cases. Link availability
-   and direct-URL access are separate requirements.
+   and direct-URL access are separate requirements. Section/topic structure and
+   link rules and description/outcomes/criteria are implemented locally with 203
+   passing Release tests; grouped course-list metadata/presentation remains.
 3. **Completion and deferred-feedback boundary (S05, T10).** Agree certificate
    eligibility and the user-visible deferred-feedback route before implementation.
    Test failed/passed/direct-entry/revisit cases; retain the pass guard until an

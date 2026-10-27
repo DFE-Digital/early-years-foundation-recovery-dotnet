@@ -16,6 +16,47 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Fact]
+    public async Task OverviewReceivesActualVisitedPageNamesNotOnlyTotalCount()
+    {
+        var controller = ConfidenceController("formative");
+        await controller.Page("module-one", "q1", CancellationToken.None);
+        await controller.Page("module-one", "q1", CancellationToken.None);
+
+        var result = Assert.IsType<ViewResult>(await controller.Module("module-one", CancellationToken.None));
+        var model = Assert.IsType<TrainingModuleDetailViewModel>(result.Model);
+
+        Assert.Equal(["q1"], model.VisitedPageNames);
+        Assert.Equal(1, model.VisitedPageCount);
+    }
+
+    [Fact]
+    public async Task OverviewTopicAvailabilityUsesSavedVisitsWithoutRestrictingDirectPageAccess()
+    {
+        var module = ConfidenceModule("formative");
+        module = module with
+        {
+            Pages = [
+                new("section", "Learning section", "sub_module_intro", ""),
+                new("topic", "Topic", "topic_intro", ""),
+                module.Pages[0],
+                module.Pages[1] with { PageType = "topic_intro" }
+            ]
+        };
+        var controller = TestController(module);
+        var initial = Assert.IsType<ViewResult>(await controller.Module(module.Name, CancellationToken.None));
+        var initialTopic = Assert.IsType<TrainingModuleDetailViewModel>(initial.Model).Sections[0].Topics[0];
+        Assert.Null(initialTopic.PageName);
+
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "topic", CancellationToken.None));
+        await controller.Page(module.Name, "q1", CancellationToken.None);
+        var revisited = Assert.IsType<ViewResult>(await controller.Module(module.Name, CancellationToken.None));
+        var sections = Assert.IsType<TrainingModuleDetailViewModel>(revisited.Model).Sections;
+        Assert.Equal("topic", sections[0].Topics[0].PageName);
+        Assert.Equal("Completed", sections[0].Topics[0].Status);
+        Assert.Null(sections[0].Topics[1].PageName);
+    }
+
+    [Fact]
     public async Task OverviewDoesNotStartModuleOrLosePreLearningResumePage()
     {
         var controller = ConfidenceController("pre_confidence");

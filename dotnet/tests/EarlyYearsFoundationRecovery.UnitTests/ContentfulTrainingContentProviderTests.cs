@@ -12,6 +12,49 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class ContentfulTrainingContentProviderTests
 {
     [Theory]
+    [InlineData("description")]
+    [InlineData("outcomes")]
+    public async Task MapsLocalizedModuleOverviewRichText(string field)
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        response["items"]![0]!["fields"]![field] = JsonNode.Parse("""
+            {"en-US":{"nodeType":"document","content":[
+              {"nodeType":"paragraph","content":[{"nodeType":"text","value":"Understand individual needs.","marks":[{"type":"bold"}]}]}
+            ]}}
+            """);
+
+        var module = await MapModuleResponseAsync(response.ToJsonString());
+
+        Assert.Contains("<strong>Understand individual needs.</strong>",
+            new TrainingContentRenderer().Render(field == "description" ? module.Description : module.Outcomes).Value!);
+    }
+
+    [Fact]
+    public async Task MapsModuleOverviewMarkdownWithoutChangingPageAvailability()
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        response["items"]![0]!["fields"]!["description"] = "Learn about **development**.";
+        response["items"]![0]!["fields"]!["outcomes"] = "- Observe children\n- Support learning";
+
+        var module = await MapModuleResponseAsync(response.ToJsonString());
+
+        Assert.Equal("Learn about **development**.", module.Description);
+        Assert.Equal("- Observe children\n- Support learning", module.Outcomes);
+        Assert.False(module.IsDraft);
+        Assert.Single(module.Pages);
+    }
+
+    [Fact]
+    public async Task MissingModuleOverviewMetadataRemainsOptional()
+    {
+        var module = await MapModuleResponseAsync(ContentfulResponse);
+
+        Assert.Empty(module.Description);
+        Assert.Empty(module.Outcomes);
+        Assert.False(module.IsDraft);
+    }
+
+    [Theory]
     [InlineData("confidence")]
     [InlineData("pre_confidence")]
     public async Task MapsLocalizedConfidenceDescriptionAndHint(string pageType)

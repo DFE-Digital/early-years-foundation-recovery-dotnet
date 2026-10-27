@@ -17,6 +17,10 @@ public sealed record TrainingModuleDetailViewModel(
     DateTimeOffset? CompletedAt = null,
     AssessmentAttempt? LatestAssessment = null)
 {
+    public IReadOnlyCollection<string> VisitedPageNames { get; init; } = [];
+
+    public IReadOnlyList<TrainingOverviewSection> Sections => TrainingOverviewSection.Create(this);
+
     public TrainingPage? ResumePage
     {
         get

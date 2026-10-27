@@ -5,7 +5,7 @@
 This log records AI-assisted work on the .NET core-journey rewrite, including
 human direction, implementation decisions, validation and known limitations.
 
-Created on 27 October 2026 after development had begun. Entries up to and including
+Created after development had begun. Entries up to and including
 the acceptance inventory are **retrospective**, reconstructed from Git commits
 and retained conversation/checkpoint summaries. They are not a verbatim prompt
 transcript, a complete record of tool calls, or independently audited evidence.
@@ -28,13 +28,13 @@ does not assert a particular underlying model version.
 - Commit verified slices when the user requests a checkpoint. Do not push without
   instruction. Checkpoint commits include a Copilot co-author trailer.
 - Update this log in every checkpoint commit, including validation, remaining
-  work and any local test-data changes. Use dated development-diary entries;
+  work and any local test-data changes. Use sequential checkpoint numbers;
   retain the provenance note for backfilled history.
 - Do not record credentials, tokens, private keys or learner personal data here.
 
 ## Development diary
 
-### Foundation and local setup
+### Checkpoint 01: foundation and local setup
 
 The user first asked whether existing branches contained a .NET rewrite, then
 requested a fresh implementation and planning exercise. Core journeys were chosen
@@ -51,10 +51,10 @@ reference, not the architecture to copy.
 
 **Limitations:** real One Login integration was not verified. The initial notes,
 account and navigation implementations were incomplete parity implementations.
-The commit `3252b8c7` dated 23 October has the generic message `wip`; this log does
+The commit `3252b8c7` has the generic message `wip`; this log does
 not attribute every foundation change to that commit.
 
-### 27 October 2026: training journeys and real content
+### Checkpoint 02: training journeys and real content
 
 **Checkpoint:** `bf9f5075` - Improve training journeys and real Contentful rendering.
 
@@ -67,7 +67,7 @@ failed and passed assessment attempts.
 **Limitations:** passing a local journey did not establish full Rails parity or
 production readiness. Integrated-browser video playback remained unverified.
 
-### 27 October 2026: PDFs and richer content
+### Checkpoint 03: PDFs and richer content
 
 **Checkpoint:** `107bc8da` - Add certificate PDFs and Contentful rich content rendering.
 
@@ -85,7 +85,7 @@ rendering checks were performed.
 **Decision:** keep raw CMS HTML disabled and report unsupported/broken content
 explicitly. Decorative Rails icon fonts were not reproduced.
 
-### 27 October 2026: expandable guidance and assessment review
+### Checkpoint 04: expandable guidance and assessment review
 
 **Checkpoint:** `88316912` - Add inset guidance, expandable details and assessment feedback.
 
@@ -97,7 +97,7 @@ failure guidance, including passes with mistakes.
 **Validation at checkpoint:** 130 Release tests passed after these slices; live app and
 certificate checks remained healthy.
 
-### 27 October 2026: state-aware module navigation
+### Checkpoint 05: state-aware module navigation
 
 **Checkpoint:** `d49ed308` - Align completed and failed module navigation with Rails.
 
@@ -108,7 +108,7 @@ active retries retained normal resume behaviour.
 **Validation at checkpoint:** 138 Release tests passed, with actual Razor link tests
 and a live completed-module-to-PDF check.
 
-### 27 October 2026: formative explanations
+### Checkpoint 06: formative explanations
 
 **Checkpoint:** `89006523` - Add Contentful explanations to learning-check feedback.
 
@@ -119,7 +119,7 @@ saved formative questions, with multi-select, encoding and sanitization coverage
 feedback were checked. An incorrect formative response was deliberately persisted
 on the local test account; the user was informed.
 
-### 27 October 2026: refresh safety and confidence journeys
+### Checkpoint 07: refresh safety and confidence journeys
 
 **Checkpoint:** `1dbb8b61` - Make learning checks refresh-safe and improve confidence journeys.
 
@@ -136,7 +136,11 @@ during refresh-safety testing; no new answers were saved during the guidance che
 
 **Limitations:** dedicated confidence lifecycle records remained missing.
 
-### 27 October 2026: plan review and acceptance inventory
+### Checkpoint 08: lifecycle correction, acceptance inventory and AI log
+
+**Checkpoint commit:** `26238401` - Separate module start from page views.
+
+#### Plan review and acceptance inventory
 
 The user requested a review of the original plan, current progress and remaining
 work. AI assistance reread the plan and inspected relevant Rails and .NET sources,
@@ -155,7 +159,7 @@ code changed and tests were not rerun for documentation-only work.
 resume information and existing records. Do not change completion eligibility in
 that slice.
 
-### 27 October 2026: introduction of this log
+#### Introduction of this log
 
 The user noted that an AI log should have been kept. This retrospective was added
 from available evidence, explicitly labelled rather than presented as a
@@ -165,15 +169,10 @@ contemporaneous record. The README links to it.
 and this documentation update are not yet committed. Nothing has been pushed by
 the assistant. Latest reported runtime suite: 173 passing Release tests.
 
-## Ongoing entries
-
-### 27 October 2026: module-start lifecycle correction
+#### Module-start lifecycle correction
 
 **User objective:** continue with the first acceptance-inventory implementation
 slice, then checkpoint it together with the acceptance inventory and AI log.
-
-**Checkpoint:** Separate module start from page views. This entry is included in
-that commit; use its Git history for the resulting commit hash.
 
 Removed module-start writes from overview visits and from generic domain page
 views. The application service now explicitly starts learning only on a
@@ -205,21 +204,86 @@ confidence lifecycle records and overview section availability remain outstandin
 The checkpoint includes these runtime changes, the acceptance inventory and this
 log. No push was requested.
 
-### 27 October 2026: checkpoint logging agreement
+#### Checkpoint logging agreement
 
 The user requested an AI-log update at every checkpoint and a development-diary
-style for earlier entries. Historical entries now use consistent dated checkpoint
-headings and validation labels. Their backfilled provenance remains explicit;
+style for earlier entries. Entries use sequential checkpoint numbers rather than
+calendar dates, with validation labels. Their backfilled provenance remains explicit;
 no commit dates or evidence were changed to imply contemporaneous authorship.
 
 **Next step:** module overview sections and availability rules, using Rails
 behaviour and failing regression tests first.
 
+### Checkpoint 09: module overview sections, availability and learning outcomes
+
+**User objective:** continue with overview grouping, availability and metadata,
+then checkpoint the verified changes.
+
+**Checkpoint:** Group module overviews and show learning outcomes. This entry is
+included in that commit; its Git history provides the resulting hash.
+
+Replaced the flat content-page list with section headings, topic outlines,
+page counts and text progress indicators. Grouping follows Rails section/topic
+boundaries; interruption pages and pre-confidence/feedback sections are excluded.
+Individual content pages/questions are no longer overview links.
+
+Saved visited-page names now flow from the progress store through the application
+listing and controller into the overview. Incomplete topics remain plain text;
+completed topics link to their headers. Persisted module completion makes topics
+revisitable even without individual historical visit records. Failed assessment
+status and passed reflection availability are represented. Direct-URL access,
+resume CTAs, assessment submissions and completion eligibility are unchanged.
+
+**Red before green:** six actual-Razor cases failed on the flat overview, and a
+separate controller case failed because visited names were absent. Implemented the
+grouping and plumbing, then added boundary/order/count, removed-content and direct
+access regressions. A Razor variable-name compilation error was corrected during
+implementation. The full Release suite passed **196 tests**.
+
+**Manual evidence:** all eight published module overviews returned successfully
+with grouped sections and topic lists. The completed brain-development module
+exposed all ten topics; incomplete modules did not expose unfinished topic links.
+The child-development overview had no horizontal overflow at 375px. App/database
+health remained healthy. These checks viewed overviews only; no answers or new
+learning starts were recorded.
+
+**Remaining:** module descriptions/outcomes, grouped module listing, broader
+accessibility acceptance and automated PostgreSQL overview evidence. Updated the
+acceptance inventory and README. Changes remain uncommitted, including the earlier
+checkpoint-number formatting update to this log.
+
+#### Module overview descriptions and learning outcomes
+
+Continued the same uncommitted overview checkpoint with Contentful module
+description/outcomes mapping and overview display of description, outcomes and
+coverage criteria. All fields use the existing sanitized Markdown/rich-text
+pipeline. Optional empty metadata does not create empty headings or change module
+availability. Existing navigation, assessment and certificate rules are unchanged.
+
+**Red before green:** four of seven new metadata cases failed before implementation.
+After mapping/rendering changes, 79 focused tests passed and the full Release suite
+passed **203 tests**, including PDF regressions. Editor diagnostics and whitespace
+checks passed.
+
+**Manual evidence:** all eight published module overviews displayed description,
+outcomes and criteria successfully. The completed brain-development overview
+retained its topics and certificate CTA, with no horizontal overflow at 375px.
+App/database health remained healthy. No answers or new module starts were recorded.
+
+Updated T02 to Implemented for the enumerated functional cases; visual,
+accessibility and database acceptance remain separate. Grouped course-list
+presentation is still outstanding. The user requested this checkpoint after
+verification; no push was requested.
+
+**Checkpoint validation:** latest full Release result is 203 passed; whitespace
+checks passed. Includes the preceding overview slice and checkpoint-number log
+formatting. Next: group My modules by learning state.
+
 ## Future entry format
 
 At subsequent checkpoints, append:
 
-- Date, user-requested objective and checkpoint commit, if any.
+- Next sequential checkpoint number, user-requested objective and checkpoint commit, if any.
 - Changes and significant decisions, including approved behaviour differences.
 - Tests actually run and their outcomes; distinguish automated and manual evidence.
 - Remaining gaps, blockers, local test-data changes and the next step.

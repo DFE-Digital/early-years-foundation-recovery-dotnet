@@ -27,7 +27,10 @@ public sealed class TrainingJourneyService(
                 var isCompleted = userProgress?.CompletedAt is not null;
                 var isStarted = userProgress?.StartedAt is not null;
                 var state = isCompleted ? "completed" : isStarted ? "in-progress" : "available";
-                return new ModuleListing(module, state, userProgress?.VisitedPageCount ?? 0, userProgress?.LastPageName);
+                return new ModuleListing(module, state, userProgress?.VisitedPageCount ?? 0, userProgress?.LastPageName)
+                {
+                    VisitedPageNames = userProgress?.VisitedPages.Select(page => page.Name).ToArray() ?? []
+                };
             })
             .ToArray();
     }
@@ -247,6 +250,9 @@ public sealed class TrainingJourneyService(
     }
 }
 
-public sealed record ModuleListing(TrainingModule Module, string State, int VisitedPageCount, string? LastPageName = null);
+public sealed record ModuleListing(TrainingModule Module, string State, int VisitedPageCount, string? LastPageName = null)
+{
+    public IReadOnlyCollection<string> VisitedPageNames { get; init; } = [];
+}
 
 public sealed record AssessmentResult(bool Correct, decimal? Score, bool? Passed, bool IsComplete);

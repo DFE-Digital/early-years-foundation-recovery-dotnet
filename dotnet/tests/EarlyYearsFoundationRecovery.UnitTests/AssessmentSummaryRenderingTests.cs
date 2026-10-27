@@ -23,6 +23,197 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         _factory = factory;
     }
 
+    [Fact]
+    public async Task OverviewRendersDescriptionOutcomesAndCriteriaThroughSanitizedContentRenderer()
+    {
+        var module = OverviewModule() with
+        {
+            Description = "Explore **child development**.\n\n<script>alert(1)</script>",
+            Outcomes = "- Observe individual needs\n- [Support learning](/training/module-one/content/topic-one)",
+            Criteria = "- Healthy relationships\n\n[Unsafe](javascript:alert%281%29)"
+        };
+        var html = await RenderAsync(new TrainingModuleDetailViewModel(module, 0), "/Views/Training/Module.cshtml");
+
+        Assert.Contains("Explore <strong>child development</strong>.", html);
+        Assert.Contains("On completion of this module you will be able to:", html);
+        Assert.Contains("<li>Observe individual needs</li>", html);
+        Assert.Contains("This module covers:", html);
+        Assert.Contains("<li>Healthy relationships</li>", html);
+        Assert.Contains("href=\"/training/module-one/content/topic-one\">Support learning</a>", html);
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("javascript:", html);
+        Assert.True(html.IndexOf("Explore <strong>", StringComparison.Ordinal) <
+            html.IndexOf("Module content", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task MissingOverviewMetadataDoesNotRenderEmptyHeadings(string content)
+    {
+        var module = OverviewModule() with { Description = content, Outcomes = content, Criteria = content };
+        var html = await RenderAsync(new TrainingModuleDetailViewModel(module, 0), "/Views/Training/Module.cshtml");
+
+        Assert.DoesNotContain("On completion of this module", html);
+        Assert.DoesNotContain("This module covers:", html);
+        Assert.Contains("Learning section", html);
+        Assert.Contains("Start module", html);
+    }
+
+    [Fact]
+    public async Task OverviewGroupsTopicsAndHidesIndividualQuestionsAndFeedback()
+    {
+        var module = OverviewModule();
+        var html = await RenderAsync(new TrainingModuleDetailViewModel(module, 0), "/Views/Training/Module.cshtml");
+
+        Assert.Contains("Learning section", html);
+        Assert.Contains("First topic", html);
+        Assert.Contains("Second topic", html);
+        Assert.Contains("Not started", html);
+        Assert.DoesNotContain("Private question title", html);
+        Assert.DoesNotContain("Feedback question title", html);
+        Assert.DoesNotContain("Before confidence question", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/topic-one\"", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/topic-two\"", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/certificate\"", html);
+    }
+
+    [Fact]
+    public async Task OverviewPartiallyViewedTopicHasStatusButIsNotLinked()
+    {
+        var module = OverviewModule();
+        var model = new TrainingModuleDetailViewModel(module, 2, "topic-one")
+        {
+            VisitedPageNames = ["section", "topic-one"]
+        };
+        var html = await RenderAsync(model, "/Views/Training/Module.cshtml");
+
+        Assert.Contains("In progress", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/topic-one\">First topic", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/topic-two\"", html);
+    }
+
+    [Fact]
+    public async Task OverviewCompletedTopicLinksToItsHeaderNotLastVisitedPage()
+    {
+        var module = OverviewModule();
+        var model = new TrainingModuleDetailViewModel(module, 3, "question")
+        {
+            VisitedPageNames = ["section", "topic-one", "question"]
+        };
+        var html = await RenderAsync(model, "/Views/Training/Module.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/topic-one\">First topic</a>", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/topic-two\"", html);
+        Assert.Contains("Completed", html);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OverviewReflectionLinkRequiresPassedAssessmentEvenIfPreviouslyVisited(bool passed)
+    {
+        var module = OverviewModule();
+        var attempt = new AssessmentAttempt(1, module.Name, DateTimeOffset.UtcNow);
+        attempt.AddOrReplaceAnswer("test-question", [passed ? "1" : "2"], passed);
+        attempt.Grade(1, DateTimeOffset.UtcNow);
+        var model = new TrainingModuleDetailViewModel(module, 2, "question", LatestAssessment: attempt)
+        {
+            VisitedPageNames = ["reflection", "confidence-question"]
+        };
+        var html = await RenderAsync(model, "/Views/Training/Module.cshtml");
+
+        Assert.Equal(passed, html.Contains("href=\"/training/module-one/content/reflection\">Reflect on learning</a>",
+            StringComparison.Ordinal));
+        Assert.Contains(passed ? "Completed" : "Failed", html);
+    }
+
+    [Fact]
+    public async Task OverviewCompletionMakesTopicsRevisitableWithoutIndividualVisitRecords()
+    {
+        var module = OverviewModule();
+        var html = await RenderAsync(new TrainingModuleDetailViewModel(module, 0, CompletedAt: DateTimeOffset.UtcNow),
+            "/Views/Training/Module.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/topic-one\">First topic</a>", html);
+        Assert.Contains("href=\"/training/module-one/content/topic-two\">Second topic</a>", html);
+        Assert.Contains("Complete module", html);
+        Assert.DoesNotContain("Not started", html);
+        Assert.DoesNotContain("In progress", html);
+    }
+
+    private static TrainingModule OverviewModule() =>
+        new("module-one", "Module one", 1, false,
+        [
+            new("before", "Confidence check", "text_page", ""),
+            new("before-question", "Before confidence question", "pre_confidence", ""),
+            new("section", "Learning section", "sub_module_intro", ""),
+            new("topic-one", "First topic", "topic_intro", ""),
+            new("question", "Private question title", "formative", ""),
+            new("topic-two", "Second topic", "topic_intro", ""),
+            new("reading", "Reading page", "text_page", ""),
+            new("summary", "Review and reflect", "summary_intro", ""),
+            new("recap", "Module recap", "recap_page", ""),
+            new("test", "End of module test", "assessment_intro", ""),
+            new("test-question", "Test question", "summative", ""),
+            new("results", "Results", "assessment_results", ""),
+            new("reflection", "Reflect on learning", "confidence_intro", ""),
+            new("confidence-question", "After confidence question", "confidence", ""),
+            new("feedback", "Feedback question title", "feedback", ""),
+            new("thanks", "Thank you", "thankyou", ""),
+            new("certificate", "Download certificate", "certificate", "")
+        ]);
+
+    [Fact]
+    public void OverviewSectionsPreserveOrderCountsAndTopicBoundaries()
+    {
+        var module = OverviewModule();
+        module = module with
+        {
+            Pages = [
+                new("interrupt", "Not an overview section", "interruption_page", ""),
+                .. module.Pages.Take(7),
+                new("section-two", "Another learning section", "sub_module_intro", ""),
+                new("topic-three", "Third topic", "topic_intro", ""),
+                .. module.Pages.Skip(7)
+            ]
+        };
+        var sections = new TrainingModuleDetailViewModel(module, 2)
+        {
+            VisitedPageNames = ["topic-one", "question"]
+        }.Sections;
+
+        Assert.Equal(["Learning section", "Another learning section", "Review and reflect", "Complete module"],
+            sections.Select(section => section.Title));
+        Assert.Equal([5, 2, 7, 1], sections.Select(section => section.PageCount));
+        Assert.Equal(["First topic", "Second topic"], sections[0].Topics.Select(topic => topic.Title));
+        Assert.Equal("Completed", sections[0].Topics[0].Status);
+        Assert.Equal("topic-one", sections[0].Topics[0].PageName);
+        Assert.Equal("Not started", sections[0].Topics[1].Status);
+        Assert.Null(sections[0].Topics[1].PageName);
+        Assert.Equal("In progress", sections[0].Status);
+    }
+
+    [Fact]
+    public void OverviewIgnoresRemovedVisitNamesWhenCalculatingTopicCompletion()
+    {
+        var module = OverviewModule();
+        var sections = new TrainingModuleDetailViewModel(module, 10)
+        {
+            VisitedPageNames = ["removed-page", "another-removed-page"]
+        }.Sections;
+
+        Assert.All(sections, section => Assert.Equal("Not started", section.Status));
+        Assert.All(sections.SelectMany(section => section.Topics), topic => Assert.Null(topic.PageName));
+    }
+
+    [Fact]
+    public void OverviewWithoutContentHasNoSections()
+    {
+        Assert.Empty(new TrainingModuleDetailViewModel(
+            OverviewModule() with { Pages = [] }, 0).Sections);
+    }
+
     [Theory]
     [InlineData("confidence", true)]
     [InlineData("pre_confidence", false)]

@@ -65,7 +65,10 @@ public sealed class TrainingController(
         var completedAt = await training.GetCompletionDateAsync(account, moduleName, cancellationToken);
         var latestAssessment = await training.GetLatestAssessmentAsync(account, moduleName, cancellationToken);
         return View(new TrainingModuleDetailViewModel(
-            module, listing?.VisitedPageCount ?? 0, listing?.LastPageName, completedAt, latestAssessment));
+            module, listing?.VisitedPageCount ?? 0, listing?.LastPageName, completedAt, latestAssessment)
+        {
+            VisitedPageNames = listing?.VisitedPageNames ?? []
+        });
     }
 
     [HttpGet("{moduleName}/content/{pageName}")]

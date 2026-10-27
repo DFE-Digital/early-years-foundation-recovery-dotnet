@@ -52,7 +52,9 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
                       pages.Length == 0;
 
         return new TrainingModule(name, title, position, isDraft, pages,
-            ContentfulDeliveryClient.StringField(fields, "criteria", entries));
+            ContentfulDeliveryClient.StringField(fields, "criteria", entries),
+            ContentfulDeliveryClient.StringField(fields, "description", entries),
+            ContentfulDeliveryClient.StringField(fields, "outcomes", entries));
     }
 
     private static TrainingPage MapPage(JsonElement entry, IReadOnlyList<JsonElement> entries)
