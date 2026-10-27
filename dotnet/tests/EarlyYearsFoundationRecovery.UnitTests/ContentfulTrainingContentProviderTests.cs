@@ -12,6 +12,37 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class ContentfulTrainingContentProviderTests
 {
     [Theory]
+    [InlineData("confidence")]
+    [InlineData("pre_confidence")]
+    public async Task MapsLocalizedConfidenceDescriptionAndHint(string pageType)
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        var fields = response["includes"]!["Entry"]![0]!["fields"]!;
+        fields["page_type"] = new JsonObject { ["en-US"] = pageType };
+        fields["description"] = JsonNode.Parse("""
+            {"en-US":{"nodeType":"document","content":[
+              {"nodeType":"paragraph","content":[{"nodeType":"text","value":"Reflect on your learning.","marks":[{"type":"bold"}]}]}
+            ]}}
+            """);
+        fields["hint"] = new JsonObject { ["en-US"] = "Choose the response that best reflects your confidence." };
+
+        var question = await MapPageResponseAsync(response.ToJsonString());
+
+        Assert.Contains("<strong>Reflect on your learning.</strong>",
+            new TrainingContentRenderer().Render(question.Description).Value!);
+        Assert.Equal("Choose the response that best reflects your confidence.", question.Hint);
+    }
+
+    [Fact]
+    public async Task MissingOptionalConfidenceGuidanceRemainsEmpty()
+    {
+        var question = await MapPageResponseAsync(ContentfulResponse);
+
+        Assert.Empty(question.Description);
+        Assert.Empty(question.Hint);
+    }
+
+    [Theory]
     [InlineData("failure_message")]
     [InlineData("success_message")]
     public async Task MapsRichTextAssessmentFeedbackThroughTheSameSanitizedPipeline(string field)

@@ -231,7 +231,7 @@ public sealed class TrainingController(
             return RedirectToAction(nameof(AssessmentResult), new { moduleName });
         }
 
-        return View("AnswerResult", new AssessmentResultViewModel(module, question, result));
+        return RedirectToAction(nameof(Page), new { moduleName, pageName = questionName });
     }
 
     [HttpGet("{moduleName}/assessment-result")]

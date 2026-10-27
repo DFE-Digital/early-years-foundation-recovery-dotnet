@@ -3,6 +3,9 @@
 @{
     ViewData["Title"] = Model.Title;
     var isQuestion = Model.Page.PageType is "formative" or "summative" or "confidence" or "pre_confidence";
+    var showDescription = Model.Page.PageType == "confidence" && !string.IsNullOrWhiteSpace(Model.Page.Description);
+    var showHint = Model.IsConfidenceCheck && !string.IsNullOrWhiteSpace(Model.Page.Hint);
+    var answerDescriptionIds = $"{(showDescription ? "question-description " : "")}{(showHint ? "question-hint " : "")}answer-error";
 }
 <p class="back-link"><a asp-action="Module" asp-route-moduleName="@Model.Module.Name">Back to @Model.Module.Title</a></p>
 <p class="eyebrow">@Model.Module.Title</p>
@@ -17,6 +20,14 @@
     <form asp-action="Answer" asp-route-moduleName="@Model.Module.Name" asp-route-questionName="@Model.Page.Name" method="post">
         <fieldset class="form-group">
             <legend class="content-body">@ContentRenderer.Render(Model.Page.Body)</legend>
+            @if (showDescription)
+            {
+                <div class="hint content-body" id="question-description">@ContentRenderer.Render(Model.Page.Description)</div>
+            }
+            @if (showHint)
+            {
+                <p class="hint" id="question-hint">@Model.Page.Hint</p>
+            }
             @if (!Model.IsConfidenceCheck)
             {
                 <p>@(Model.Page.AllowsMultipleAnswers ? "Select all answers that apply." : "Select one answer.")</p>
@@ -25,7 +36,7 @@
             @foreach (var option in Model.Page.Options ?? [])
             {
                 <label class="checkbox-label">
-                    <input type="@(Model.Page.AllowsMultipleAnswers ? "checkbox" : "radio")" name="SelectedAnswerIds" value="@option.Id" checked="@Model.SelectedAnswerIds.Contains(option.Id)" disabled="@Model.IsReadOnly" aria-describedby="answer-error" />
+                    <input type="@(Model.Page.AllowsMultipleAnswers ? "checkbox" : "radio")" name="SelectedAnswerIds" value="@option.Id" checked="@Model.SelectedAnswerIds.Contains(option.Id)" disabled="@Model.IsReadOnly" aria-describedby="@answerDescriptionIds" />
                     @option.Label
                 </label>
             }
@@ -97,6 +108,10 @@ else
             <a asp-controller="Training" asp-action="Index">Return to my modules</a>
         </div>
     }
+    @if (Model.PreviousPage is not null)
+    {
+        <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.PreviousPage.Name">Previous</a>
+    }
     @if (Model.NextPage is not null)
     {
         <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
@@ -104,5 +119,9 @@ else
     else
     {
         <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+    }
+    @if (Model.SkipPreConfidencePage is { } skipPage)
+    {
+        <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@skipPage.Name">Skip questions</a>
     }
 }

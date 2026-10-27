@@ -1,5 +1,4 @@
 using EarlyYearsFoundationRecovery.Application.Contracts;
-using EarlyYearsFoundationRecovery.Application.Training;
 using EarlyYearsFoundationRecovery.Domain.Training;
 using EarlyYearsFoundationRecovery.Web.Models;
 using Microsoft.AspNetCore.Http;
@@ -23,6 +22,183 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     {
         _factory = factory;
     }
+
+    [Theory]
+    [InlineData("confidence", true)]
+    [InlineData("pre_confidence", false)]
+    [InlineData("formative", false)]
+    [InlineData("summative", false)]
+    public async Task ConfidenceGuidanceMatchesRailsAndIsAccessible(string pageType, bool showDescription)
+    {
+        var question = FormativeQuestion() with
+        {
+            PageType = pageType,
+            Description = "**Reflect on your learning.**\n\n[Unsafe](javascript:alert%281%29)",
+            Hint = "Choose honestly. <script>alert(1)</script>"
+        };
+        var module = new TrainingModule("module-one", "Module one", 1, false, [question]);
+        var html = await RenderAsync(new TrainingPageViewModel(module, question, null, null),
+            "/Views/Training/Page.cshtml");
+
+        if (showDescription)
+        {
+            Assert.Contains("<strong>Reflect on your learning.</strong>", html);
+            Assert.Contains("id=\"question-description\"", html);
+            Assert.Contains("aria-describedby=\"question-description question-hint answer-error\"", html);
+        }
+        else
+        {
+            Assert.DoesNotContain("Reflect on your learning.", html);
+            Assert.DoesNotContain("question-description", html);
+        }
+        if (pageType is "confidence" or "pre_confidence")
+        {
+            Assert.Contains("id=\"question-hint\"", html);
+            Assert.Contains("Choose honestly. &lt;script&gt;alert(1)&lt;/script&gt;", html);
+            Assert.DoesNotContain("Select one answer.", html);
+            if (!showDescription)
+            {
+                Assert.Contains("aria-describedby=\"question-hint answer-error\"", html);
+            }
+        }
+        else
+        {
+            Assert.DoesNotContain("question-hint", html);
+            Assert.DoesNotContain("Choose honestly.", html);
+        }
+        Assert.DoesNotContain("<script", html);
+        Assert.DoesNotContain("javascript:", html);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task EmptyConfidenceGuidanceDoesNotCreateDanglingAccessibilityReferences(string guidance)
+    {
+        var question = FormativeQuestion() with { PageType = "confidence", Description = guidance, Hint = guidance };
+        var module = new TrainingModule("module-one", "Module one", 1, false, [question]);
+        var html = await RenderAsync(new TrainingPageViewModel(module, question, null, null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.DoesNotContain("question-hint", html);
+        Assert.DoesNotContain("question-description", html);
+        Assert.Contains("aria-describedby=\"answer-error\"", html);
+    }
+
+    [Theory]
+    [InlineData("**Think back.**", "", "question-description answer-error")]
+    [InlineData("", "Choose one response.", "question-hint answer-error")]
+    public async Task ConfidenceOptionsReferenceOnlyTheGuidanceThatExists(
+        string description, string hint, string expectedReferences)
+    {
+        var question = FormativeQuestion() with
+        {
+            PageType = "confidence", Description = description, Hint = hint
+        };
+        var module = new TrainingModule("module-one", "Module one", 1, false, [question]);
+        var html = await RenderAsync(new TrainingPageViewModel(module, question, null, null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Equal(question.Options!.Count, System.Text.RegularExpressions.Regex.Matches(
+            html, $"aria-describedby=\"{expectedReferences}\"").Count);
+        Assert.Equal(description.Length > 0, html.Contains("id=\"question-description\"", StringComparison.Ordinal));
+        Assert.Equal(hint.Length > 0, html.Contains("id=\"question-hint\"", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("text_page")]
+    [InlineData("pre_confidence_intro")]
+    public async Task ConfidenceIntroductionOffersOptionalSkipToLearningContent(string introType)
+    {
+        var module = PreConfidenceModule(introType);
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[0], module.Pages[1], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/before-one\"", html);
+        Assert.Contains("href=\"/training/module-one/content/start-learning\">Skip questions</a>", html);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public async Task SkipIsNotOfferedFromQuestionsLearningContentOrPostConfidence(int pageIndex)
+    {
+        var module = PreConfidenceModule("text_page");
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[pageIndex],
+            pageIndex + 1 < module.Pages.Count ? module.Pages[pageIndex + 1] : null, null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.DoesNotContain("Skip questions", html);
+    }
+
+    [Fact]
+    public async Task IntroductionDoesNotOfferSkipWithoutALearningContentDestination()
+    {
+        var module = PreConfidenceModule("text_page");
+        module = module with { Pages = module.Pages.Where(page => page.PageType != "sub_module_intro").ToArray() };
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[0], module.Pages[1], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.DoesNotContain("Skip questions", html);
+        Assert.Contains("href=\"/training/module-one/content/before-one\"", html);
+    }
+
+    [Fact]
+    public async Task LearningStartPreviousReturnsToIntroductionWithoutForcingConfidenceQuestions()
+    {
+        var module = PreConfidenceModule("text_page");
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[3], module.Pages[4], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/before-intro\">Previous</a>", html);
+        Assert.DoesNotContain("href=\"/training/module-one/content/before-two\"", html);
+    }
+
+    [Fact]
+    public async Task InterruptionPageDoesNotOfferConfidenceSkip()
+    {
+        var module = PreConfidenceModule("interruption_page");
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[0], module.Pages[1], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.DoesNotContain("Skip questions", html);
+    }
+
+    [Fact]
+    public async Task PreviousWithinConfidenceCheckStillReturnsToPreviousQuestion()
+    {
+        var module = PreConfidenceModule("text_page");
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[2], module.Pages[3], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/before-one\">Previous</a>", html);
+    }
+
+    [Fact]
+    public async Task LearningStartWithoutPreConfidenceReturnsToImmediatePreviousPage()
+    {
+        var module = PreConfidenceModule("text_page");
+        module = module with { Pages = module.Pages.Where(page => page.PageType != "pre_confidence").ToArray() };
+        var html = await RenderAsync(new TrainingPageViewModel(module, module.Pages[1], module.Pages[2], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Contains("href=\"/training/module-one/content/before-intro\">Previous</a>", html);
+    }
+
+    private static TrainingModule PreConfidenceModule(string introType) =>
+        new("module-one", "Module one", 1, false,
+        [
+            new("before-intro", "Before you start", introType, "An optional confidence check."),
+            new("before-one", "First confidence question", "pre_confidence", "How confident are you?",
+                [new("1", "Very confident")]),
+            new("before-two", "Second confidence question", "pre_confidence", "How confident are you?",
+                [new("1", "Very confident")]),
+            new("start-learning", "Start learning", "sub_module_intro", "Learning material."),
+            new("after-one", "After learning", "confidence", "How confident are you now?",
+                [new("1", "Very confident")])
+        ]);
 
     [Theory]
     [InlineData(false)]
@@ -160,20 +336,15 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    [InlineData(false, true)]
-    public async Task FormativeFeedbackShowsRelevantGuidanceOnSubmissionAndRevisit(bool correct, bool revisit)
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SavedFormativeQuestionShowsRelevantGuidance(bool correct)
     {
         var question = FormativeQuestion();
         var module = new TrainingModule("module-one", "Module one", 1, false,
             [question, new TrainingPage("next", "Next topic", "text_page", "")]);
-        var html = revisit
-            ? await RenderAsync(new TrainingPageViewModel(module, question, module.Pages[1], null)
-                { SelectedAnswerIds = [correct ? "1" : "2"] }, "/Views/Training/Page.cshtml")
-            : await RenderAsync(new AssessmentResultViewModel(module, question,
-                new AssessmentResult(correct, null, null, false)), "/Views/Training/AnswerResult.cshtml");
+        var html = await RenderAsync(new TrainingPageViewModel(module, question, module.Pages[1], null)
+            { SelectedAnswerIds = [correct ? "1" : "2"] }, "/Views/Training/Page.cshtml");
 
         Assert.Contains(correct ? "<strong>Success guidance</strong>" : "<strong>Failure guidance</strong>", html);
         Assert.DoesNotContain(correct ? "Failure guidance" : "Success guidance", html);
@@ -191,11 +362,8 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
             Assert.DoesNotContain("<h2>Correct answer</h2>", html);
             Assert.DoesNotContain("<h2>Explanation</h2>", html);
         }
-        if (revisit)
-        {
-            Assert.Contains("disabled=\"disabled\"", html);
-            Assert.DoesNotContain(">Check answer</button>", html);
-        }
+        Assert.Contains("disabled=\"disabled\"", html);
+        Assert.DoesNotContain(">Check answer</button>", html);
     }
 
     [Fact]
@@ -206,10 +374,8 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
             AllowsMultipleAnswers = true,
             CorrectAnswerIds = ["1", "3"]
         };
-        var module = new TrainingModule("module-one", "Module one", 1, false, [question]);
-
-        var html = await RenderAsync(new AssessmentResultViewModel(module, question,
-            new AssessmentResult(false, null, null, false)), "/Views/Training/AnswerResult.cshtml");
+        var html = await RenderAsync(new FormativeFeedbackViewModel(question, false),
+            "/Views/Training/_FormativeFeedback.cshtml");
 
         Assert.Contains("&lt;Support individual needs&gt;", html);
         Assert.Contains("Observe development", html);
@@ -246,8 +412,8 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         var module = new TrainingModule("module-one", "Module one", 1, false,
             [question, new TrainingPage("next", "Next", "text_page", "")]);
 
-        var html = await RenderAsync(new AssessmentResultViewModel(module, question,
-            new AssessmentResult(false, null, null, false)), "/Views/Training/AnswerResult.cshtml");
+        var html = await RenderAsync(new TrainingPageViewModel(module, question, module.Pages[1], null)
+            { SelectedAnswerIds = ["2"] }, "/Views/Training/Page.cshtml");
 
         Assert.Contains("Correct answer", html);
         Assert.DoesNotContain("<h2>Explanation</h2>", html);

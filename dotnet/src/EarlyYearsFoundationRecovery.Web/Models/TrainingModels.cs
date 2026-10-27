@@ -71,11 +71,36 @@ public sealed record TrainingPageViewModel(
     public bool IsFormativeAnswerCorrect =>
         AssessmentGrader.IsCorrect(Page.CorrectAnswerIds ?? [], SelectedAnswerIds);
 
+    public TrainingPage? SkipPreConfidencePage
+    {
+        get
+        {
+            if (Page.PageType is "interruption_page" or "pre_confidence" ||
+                NextPage?.PageType != "pre_confidence")
+            {
+                return null;
+            }
+
+            var index = Module.Pages.ToList().IndexOf(Page);
+            return index >= 0
+                ? Module.Pages.Skip(index + 1).FirstOrDefault(page => page.PageType == "sub_module_intro")
+                : null;
+        }
+    }
+
     public TrainingPage? PreviousPage
     {
         get
         {
             var index = Module.Pages.ToList().IndexOf(Page);
+            if (Page.PageType == "sub_module_intro" && index > 0 &&
+                Module.Pages[index - 1].PageType == "pre_confidence")
+            {
+                while (index > 0 && Module.Pages[index - 1].PageType == "pre_confidence")
+                {
+                    index--;
+                }
+            }
             return index > 0 ? Module.Pages[index - 1] : null;
         }
     }
@@ -88,11 +113,6 @@ public sealed class LearningNoteModel
 }
 
 public sealed record LearningNoteViewModel(string ModuleName, LearningNoteModel Note);
-
-public sealed record AssessmentResultViewModel(
-    TrainingModule Module,
-    TrainingPage Question,
-    AssessmentResult Result);
 
 public sealed record FormativeFeedbackViewModel(TrainingPage Question, bool Correct)
 {

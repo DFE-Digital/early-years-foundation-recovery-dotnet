@@ -16,6 +16,76 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Fact]
+    public async Task SkippingPreConfidenceDoesNotSubmitAnswersOrPreventAnsweringLater()
+    {
+        var module = ConfidenceModule("pre_confidence");
+        module = module with
+        {
+            Pages = [
+                new TrainingPage("before-intro", "Before you start", "text_page", ""),
+                module.Pages[0],
+                module.Pages[1] with { PageType = "sub_module_intro" },
+                new TrainingPage("certificate", "Certificate", "certificate", "")
+            ]
+        };
+        var controller = TestController(module);
+        var intro = Assert.IsType<ViewResult>(await controller.Page(module.Name, "before-intro", CancellationToken.None));
+        var skipPage = Assert.IsType<TrainingPageViewModel>(intro.Model).SkipPreConfidencePage;
+        Assert.Equal("next", skipPage?.Name);
+
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, skipPage!.Name, CancellationToken.None));
+        var question = Assert.IsType<ViewResult>(await controller.Page(module.Name, "q1", CancellationToken.None));
+        var model = Assert.IsType<TrainingPageViewModel>(question.Model);
+        Assert.Empty(model.SelectedAnswerIds);
+        Assert.False(model.IsReadOnly);
+
+        Assert.IsType<RedirectToActionResult>(await controller.Answer(
+            module.Name, "q1", new TrainingAnswerModel { SelectedAnswerIds = ["2"] }, CancellationToken.None));
+        var saved = Assert.IsType<ViewResult>(await controller.Page(module.Name, "q1", CancellationToken.None));
+        Assert.Equal(["2"], Assert.IsType<TrainingPageViewModel>(saved.Model).SelectedAnswerIds);
+        Assert.IsType<RedirectToActionResult>(await controller.Certificate(module.Name, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("1", true)]
+    [InlineData("2", false)]
+    public async Task LearningCheckSubmissionRedirectsToRefreshSafeSavedQuestion(string answer, bool correct)
+    {
+        var controller = ConfidenceController("formative");
+
+        var submitted = Assert.IsType<RedirectToActionResult>(await controller.Answer(
+            "module-one", "q1", new TrainingAnswerModel { SelectedAnswerIds = [answer] }, CancellationToken.None));
+
+        Assert.Equal(nameof(TrainingController.Page), submitted.ActionName);
+        Assert.Equal("module-one", submitted.RouteValues!["moduleName"]);
+        Assert.Equal("q1", submitted.RouteValues["pageName"]);
+        for (var refresh = 0; refresh < 2; refresh++)
+        {
+            var result = Assert.IsType<ViewResult>(await controller.Page("module-one", "q1", CancellationToken.None));
+            var model = Assert.IsType<TrainingPageViewModel>(result.Model);
+            Assert.True(model.IsReadOnly);
+            Assert.Equal([answer], model.SelectedAnswerIds);
+            Assert.Equal(correct, model.IsFormativeAnswerCorrect);
+            Assert.Equal("next", model.NextPage?.Name);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidLearningCheckAnswerDoesNotRedirectOrSaveAnAnswer()
+    {
+        var controller = ConfidenceController("formative");
+        var result = Assert.IsType<ViewResult>(await controller.Answer(
+            "module-one", "q1", new TrainingAnswerModel(), CancellationToken.None));
+
+        Assert.Equal("Page", result.ViewName);
+        Assert.False(controller.ModelState.IsValid);
+        var refreshed = Assert.IsType<ViewResult>(await controller.Page("module-one", "q1", CancellationToken.None));
+        var model = Assert.IsType<TrainingPageViewModel>(refreshed.Model);
+        Assert.Empty(model.SelectedAnswerIds);
+        Assert.False(model.IsReadOnly);
+    }
+
+    [Fact]
     public async Task CompletedModuleOverviewReturnsToCertificateEvenAfterRevisitingEarlierContent()
     {
         var module = ConfidenceModule("summative");

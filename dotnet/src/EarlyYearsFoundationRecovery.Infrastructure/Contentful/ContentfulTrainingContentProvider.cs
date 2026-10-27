@@ -107,7 +107,9 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
             (pageType is "formative" or "summative") && correctAnswers.Length > 1,
             contentType == "video" ? MapVideo(fields, entries) : null,
             ContentfulDeliveryClient.StringField(fields, "failure_message", entries),
-            ContentfulDeliveryClient.StringField(fields, "success_message", entries));
+            ContentfulDeliveryClient.StringField(fields, "success_message", entries),
+            ContentfulDeliveryClient.StringField(fields, "description", entries),
+            ContentfulDeliveryClient.StringField(fields, "hint"));
     }
 
     private static TrainingVideo MapVideo(JsonElement fields, IReadOnlyList<JsonElement> entries)

@@ -19,7 +19,9 @@ public sealed record TrainingPage(
     bool AllowsMultipleAnswers = false,
     TrainingVideo? Video = null,
     string FailureMessage = "",
-    string SuccessMessage = "");
+    string SuccessMessage = "",
+    string Description = "",
+    string Hint = "");
 
 public sealed record TrainingVideo(string? EmbedUrl, string Title, string Transcript);
 
