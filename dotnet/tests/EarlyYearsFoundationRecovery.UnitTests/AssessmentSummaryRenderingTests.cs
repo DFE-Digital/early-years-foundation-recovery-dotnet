@@ -24,6 +24,211 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     }
 
     [Theory]
+    [InlineData(true, "England", "other")]
+    [InlineData(true, "Scotland", "other")]
+    [InlineData(false, "England", "none")]
+    [InlineData(true, "England", "none")]
+    public async Task RegistrationSummaryShowsOnlyApplicableAnswersAndChangeLinks(
+        bool requiresAuthority, string country, string roleGroup)
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateSetting("other", "<Custom setting>", requiresAuthority, roleGroup);
+        account.UpdateLocation(country, "Example council");
+        if (roleGroup != "none")
+        {
+            account.UpdateRole("other", "<Custom educator>");
+            account.UpdateExperience("new");
+        }
+        account.UpdatePreferences(false, true);
+
+        var html = await RenderAsync(account, "/Views/Registration/CheckAnswers.cshtml",
+            summarySetting: "<Custom setting>", summaryExperience: "New to early years");
+
+        Assert.Contains("action=\"/registration/check-your-answers\"", html);
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Contains("&lt;Custom setting&gt;", html);
+        Assert.DoesNotContain("<Custom setting>", html);
+        Assert.Contains("href=\"/registration/setting-type\"", html);
+        Assert.Contains("Change setting</a>", html);
+        Assert.Contains("Change training email preference</a>", html);
+        Assert.Contains("Change research preference</a>", html);
+        Assert.Contains("<dt>Training emails</dt><dd>No ", html);
+        Assert.Contains("<dt>Research participation</dt><dd>Yes ", html);
+        Assert.DoesNotContain("<dd>False", html);
+        Assert.DoesNotContain("<dd>True", html);
+
+        var authorityApplicable = requiresAuthority && country == "England";
+        Assert.Equal(authorityApplicable, html.Contains("<dt>Local authority</dt>", StringComparison.Ordinal));
+        Assert.Equal(authorityApplicable, html.Contains("href=\"/registration/local-authority\"", StringComparison.Ordinal));
+        Assert.Equal(roleGroup != "none", html.Contains("href=\"/registration/role-type\"", StringComparison.Ordinal));
+        Assert.Equal(roleGroup != "none", html.Contains("href=\"/registration/early-years-experience\"", StringComparison.Ordinal));
+        Assert.Equal(roleGroup != "none", html.Contains("New to early years", StringComparison.Ordinal));
+        Assert.Equal(roleGroup != "none", html.Contains("&lt;Custom educator&gt;", StringComparison.Ordinal));
+        Assert.DoesNotContain("<Custom educator>", html);
+    }
+
+    [Fact]
+    public async Task RegistrationSummaryMakesMissingAnswersExplicitInsteadOfShowingBlankValues()
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+
+        var html = await RenderAsync(account, "/Views/Registration/CheckAnswers.cshtml");
+
+        Assert.Contains("Not agreed", html);
+        foreach (var label in new[] { "Name", "Country", "Setting", "Role", "Experience", "Training emails", "Research participation" })
+        {
+            Assert.Contains($"<dt>{label}</dt><dd>Not answered ", html);
+        }
+    }
+
+    [Fact]
+    public async Task RegistrationSummaryRejectedCompletionRetainsLabelsAndShowsErrorWithMissingAuthority()
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateSetting("nursery", null, true, "other");
+        account.UpdateLocation("England", null);
+        account.UpdateRole("Practitioner", null);
+        account.UpdateExperience("new");
+        account.UpdatePreferences(true, false);
+        const string error = "Complete the required registration steps before continuing.";
+
+        var html = await RenderAsync(account, "/Views/Registration/CheckAnswers.cshtml",
+            summarySetting: "Nursery", summaryExperience: "New to early years", summaryError: error);
+
+        Assert.Contains(error, html);
+        Assert.Contains("<dt>Local authority</dt><dd>Not answered ", html);
+        Assert.Contains("<dt>Setting</dt><dd>Nursery ", html);
+        Assert.Contains("<dt>Experience</dt><dd>New to early years ", html);
+        Assert.Contains("<dt>Training emails</dt><dd>Yes ", html);
+        Assert.Contains("<dt>Research participation</dt><dd>No ", html);
+        Assert.Contains("href=\"/registration/local-authority\"", html);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RegistrationRoleFormOffersCustomDescriptionWithoutJavascriptOnlyForGeneralRoles(bool general)
+    {
+        IReadOnlyList<RegistrationChoice> roles = general
+            ? [new("practitioner", "Practitioner"), new("other", "other")]
+            : [new("childminder", "Childminder")];
+        var html = await RenderAsync(new RoleModel { RoleType = general ? "Practitioner" : "Childminder" },
+            "/Views/Registration/Role.cshtml", registrationRoles: roles);
+
+        Assert.Contains("action=\"/registration/role-type\"", html);
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Contains(">Continue</button>", html);
+        Assert.Equal(general, html.Contains("name=\"RoleTypeOther\"", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false, "details", "Continue")]
+    [InlineData(true, "save", "Save")]
+    public async Task AccountSettingFormSeparatesChoiceFromAtomicSave(bool details, string stage, string button)
+    {
+        var html = await RenderAsync(new AccountSettingModel
+        {
+            SettingType = "nursery", ShowDetails = details, RequiresLocalAuthority = true,
+            SelectedSetting = new("nursery", "Nursery", true, "other"),
+            Settings = [new("nursery", "Nursery", true, "other")],
+            Roles = [new("practitioner", "Practitioner"), new("other", "other")],
+            Experiences = [new("new", "New to early years")],
+            LocalAuthorities = [new("example", "Example council")]
+        }, "/Views/Account/Setting.cshtml");
+
+        Assert.Contains("action=\"/account/setting\"", html);
+        Assert.Contains($"value=\"{stage}\"", html);
+        Assert.Contains($">{button}</button>", html);
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Contains("href=\"/account\">Cancel</a>", html);
+        Assert.Equal(details, html.Contains("name=\"RoleType\"", StringComparison.Ordinal));
+        Assert.Equal(details, html.Contains("name=\"LocalAuthority\"", StringComparison.Ordinal));
+        Assert.Equal(details, html.Contains("name=\"EarlyYearsExperience\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AccountSettingWithoutDependentAnswersStillRequiresExplicitSave()
+    {
+        var html = await RenderAsync(new AccountSettingModel
+        {
+            SettingType = "training", ShowDetails = true,
+            SelectedSetting = new("training", "Training provider", false, "none")
+        }, "/Views/Account/Setting.cshtml");
+
+        Assert.Contains("Training provider", html);
+        Assert.Contains(">Save</button>", html);
+        Assert.DoesNotContain("name=\"LocalAuthority\"", html);
+        Assert.DoesNotContain("name=\"RoleType\"", html);
+        Assert.DoesNotContain("name=\"EarlyYearsExperience\"", html);
+    }
+
+    [Fact]
+    public async Task AccountSettingSummaryEncodesCustomDescriptionAndOffersEdit()
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateLocation("Scotland", null);
+        account.UpdateSetting("other", "<Custom setting>", false, "none");
+        account.UpdatePreferences(false, false);
+        Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+
+        var html = await RenderAsync(account, "/Views/Account/Index.cshtml");
+
+        Assert.Contains("href=\"/account/setting\"", html);
+        Assert.Contains("&lt;Custom setting&gt;", html);
+        Assert.DoesNotContain("<Custom setting>", html);
+    }
+
+    [Fact]
+    public async Task AccountRoleFormOffersAllFieldsWithoutRequiringJavascript()
+    {
+        var html = await RenderAsync(new AccountRoleModel
+        {
+            RoleType = "Practitioner", EarlyYearsExperience = "new",
+            Roles = [new("practitioner", "Practitioner"), new("other", "other")],
+            Experiences = [new("new", "New to early years")]
+        }, "/Views/Account/Role.cshtml");
+
+        Assert.Contains("action=\"/account/role\"", html);
+        Assert.Contains("name=\"RoleTypeOther\"", html);
+        Assert.Contains("name=\"EarlyYearsExperience\"", html);
+        Assert.Contains("__RequestVerificationToken", html);
+        Assert.Contains(">Save</button>", html);
+        Assert.Contains("href=\"/account\">Cancel</a>", html);
+        Assert.Matches("<option(?=[^>]*value=\"Practitioner\")(?=[^>]*selected=\"selected\")[^>]*>", html);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AccountRoleSummaryShowsApplicableDetailsAndEditLink(bool applicable)
+    {
+        var account = new EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount("subject", "person@example.test");
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateLocation("Scotland", null);
+        account.UpdateSetting("training", null, false, applicable ? "other" : "none");
+        if (applicable)
+        {
+            account.UpdateRole("other", "<Custom educator>");
+            account.UpdateExperience("new");
+        }
+        account.UpdatePreferences(false, false);
+        Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+
+        var html = await RenderAsync(account, "/Views/Account/Index.cshtml");
+
+        Assert.Equal(applicable, html.Contains("href=\"/account/role\"", StringComparison.Ordinal));
+        Assert.Equal(applicable, html.Contains("&lt;Custom educator&gt;", StringComparison.Ordinal));
+        Assert.DoesNotContain("<Custom educator>", html);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task AccountLocationFormProvidesReferenceChoicesSaveAndCancel(bool needsAuthority)
@@ -1100,7 +1305,8 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
 
     private async Task<string> RenderAsync<TModel>(
         TModel model, string viewPath = "/Views/Training/AssessmentResult.cshtml", bool accountEdit = false,
-        bool researchPreference = false)
+        bool researchPreference = false, IReadOnlyList<RegistrationChoice>? registrationRoles = null,
+        string? summarySetting = null, string? summaryExperience = null, string? summaryError = null)
     {
         using var scope = _factory.Services.CreateScope();
         var services = scope.ServiceProvider;
@@ -1120,6 +1326,13 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
             services.GetRequiredService<IModelMetadataProvider>(), new ModelStateDictionary()) { Model = model };
         viewData["IsAccountEdit"] = accountEdit;
         viewData["IsResearchPreference"] = researchPreference;
+        viewData["Roles"] = registrationRoles;
+        viewData["SettingName"] = summarySetting;
+        viewData["ExperienceName"] = summaryExperience;
+        if (summaryError is not null)
+        {
+            viewData.ModelState.AddModelError(string.Empty, summaryError);
+        }
         var viewContext = new ViewContext(actionContext, result.View, viewData,
             new TempDataDictionary(http, services.GetRequiredService<ITempDataProvider>()),
             writer, new HtmlHelperOptions());

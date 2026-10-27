@@ -17,6 +17,606 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class TrainingJourneyServiceTests
 {
+    [Theory]
+    [InlineData(false, "nursery", null, "new", "Nursery", "New to early years")]
+    [InlineData(true, "nursery", null, "experienced", "Nursery", "Experienced")]
+    [InlineData(false, "other", "<Custom setting>", "new", "<Custom setting>", "New to early years")]
+    [InlineData(true, "legacy-setting", null, "legacy-experience", "legacy-setting", "legacy-experience")]
+    public async Task RegistrationSummaryLoadsDisplayLabelsOnGetAndRejectedCompletion(
+        bool rejectedCompletion, string setting, string? customSetting, string experience,
+        string expectedSetting, string expectedExperience)
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting(setting, customSetting, true, "other");
+        account.UpdateLocation("England", null);
+        account.UpdateRole("Practitioner", null);
+        account.UpdateExperience(experience);
+        var controller = RegistrationControllerFor(account);
+
+        var result = Assert.IsType<ViewResult>(rejectedCompletion
+            ? await controller.CompleteRegistration(CancellationToken.None)
+            : await controller.CheckAnswers(CancellationToken.None));
+
+        Assert.Same(account, result.Model);
+        Assert.Equal(expectedSetting, result.ViewData["SettingName"]);
+        Assert.Equal(expectedExperience, result.ViewData["ExperienceName"]);
+        Assert.False(account.IsRegistrationComplete);
+        if (rejectedCompletion)
+        {
+            Assert.Equal("CheckAnswers", result.ViewName);
+            Assert.False(controller.ModelState.IsValid);
+        }
+    }
+
+    [Fact]
+    public async Task RegistrationSummaryRequiresCurrentAccountForGetAndCompletion()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        var controller = RegistrationControllerFor(account);
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+
+        Assert.IsType<NotFoundResult>(await controller.CheckAnswers(CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.CompleteRegistration(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RegistrationGeneralRolesIncludeCustomChoiceAndSaveTrimmedDescription()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("nursery", null, true, "other");
+        var controller = RegistrationControllerFor(account);
+        var form = Assert.IsType<ViewResult>(await controller.Role(CancellationToken.None));
+        var roles = Assert.IsAssignableFrom<IReadOnlyList<RegistrationChoice>>(form.ViewData["Roles"]);
+        Assert.Contains(roles, role => role.Name == "other");
+
+        var result = await controller.Role(new RoleModel
+        {
+            RoleType = "other", RoleTypeOther = "  Custom educator  "
+        }, CancellationToken.None);
+
+        Assert.Equal("Experience", Assert.IsType<RedirectToActionResult>(result).ActionName);
+        Assert.Equal("other", account.RoleType);
+        Assert.Equal("Custom educator", account.RoleTypeOther);
+    }
+
+    [Theory]
+    [InlineData("other", " ", "other")]
+    [InlineData("unknown", null, "other")]
+    [InlineData("other", "Forged role", "childminder")]
+    [InlineData("Practitioner", null, "childminder")]
+    public async Task InvalidRegistrationRolePreservesSavedRoleAndRepopulatesChoices(
+        string role, string? other, string group)
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("setting", null, false, group);
+        account.UpdateRole(group == "other" ? "Practitioner" : "Childminder", null);
+        var savedRole = account.RoleType;
+        var controller = RegistrationControllerFor(account);
+
+        var result = Assert.IsType<ViewResult>(await controller.Role(
+            new RoleModel { RoleType = role, RoleTypeOther = other }, CancellationToken.None));
+
+        Assert.False(controller.ModelState.IsValid);
+        Assert.NotEmpty(Assert.IsAssignableFrom<IReadOnlyList<RegistrationChoice>>(result.ViewData["Roles"]));
+        Assert.Equal(savedRole, account.RoleType);
+        Assert.Null(account.RoleTypeOther);
+    }
+
+    [Fact]
+    public async Task RegistrationAuthorityRevisitPrefillsReferenceId()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("nursery", null, true, "other");
+        account.UpdateLocation("England", "Example council");
+        var controller = RegistrationControllerFor(account);
+
+        var result = Assert.IsType<ViewResult>(await controller.LocalAuthority(CancellationToken.None));
+
+        Assert.Equal("example", Assert.IsType<LocalAuthorityModel>(result.Model).LocalAuthority);
+    }
+
+    [Theory]
+    [InlineData("Scotland", true)]
+    [InlineData("England", false)]
+    public async Task RegistrationAuthorityPostSkipsInapplicableStepWithoutMutating(string country, bool required)
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("training", null, required, "none");
+        account.UpdateLocation(country, null);
+        var controller = RegistrationControllerFor(account);
+
+        var result = await controller.LocalAuthority(
+            new LocalAuthorityModel { LocalAuthority = "example" }, CancellationToken.None);
+
+        Assert.Equal("Role", Assert.IsType<RedirectToActionResult>(result).ActionName);
+        Assert.Null(account.LocalAuthority);
+    }
+
+    [Fact]
+    public async Task RegistrationAuthorityPostRequiresAccountBeforeValidatingSelection()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        var controller = RegistrationControllerFor(account);
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+
+        Assert.IsType<NotFoundResult>(await controller.LocalAuthority(
+            new LocalAuthorityModel { LocalAuthority = "unknown" }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task InvalidRegistrationAuthorityPreservesSavedAnswerAndChoices()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("nursery", null, true, "other");
+        account.UpdateLocation("England", "Example council");
+        var controller = RegistrationControllerFor(account);
+        var input = new LocalAuthorityModel { LocalAuthority = "unknown" };
+
+        var result = Assert.IsType<ViewResult>(await controller.LocalAuthority(input, CancellationToken.None));
+
+        Assert.Same(input, result.Model);
+        Assert.False(controller.ModelState.IsValid);
+        Assert.NotEmpty(Assert.IsAssignableFrom<IReadOnlyList<RegistrationChoice>>(result.ViewData["LocalAuthorities"]));
+        Assert.Equal("Example council", account.LocalAuthority);
+    }
+
+    [Fact]
+    public async Task RegistrationStandardRoleClearsCustomTextAndNoRoleStepsCannotOverwriteIt()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("nursery", null, false, "other");
+        account.UpdateRole("other", "Old custom role");
+        var controller = RegistrationControllerFor(account);
+
+        Assert.IsType<RedirectToActionResult>(await controller.Role(
+            new RoleModel { RoleType = "Practitioner", RoleTypeOther = "Stale custom role" },
+            CancellationToken.None));
+        Assert.Equal("Practitioner", account.RoleType);
+        Assert.Null(account.RoleTypeOther);
+        await controller.Setting(new SettingModel { SettingType = "training" }, CancellationToken.None);
+        Assert.Equal("Preferences", Assert.IsType<RedirectToActionResult>(await controller.Role(
+            new RoleModel { RoleType = "other", RoleTypeOther = "Forged role" }, CancellationToken.None)).ActionName);
+        Assert.Equal("Preferences", Assert.IsType<RedirectToActionResult>(await controller.Experience(
+            new ExperienceModel { EarlyYearsExperience = "new" }, CancellationToken.None)).ActionName);
+        Assert.Equal("N/A", account.RoleType);
+        Assert.Null(account.RoleTypeOther);
+        Assert.Null(account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task RegistrationChangedSettingClearsDependentAnswersAndCannotCompleteWithoutReplacements()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("nursery", null, true, "other");
+        account.UpdateLocation("England", "Example council");
+        account.UpdateRole("other", "Old educator");
+        account.UpdateExperience("new");
+        var controller = RegistrationControllerFor(account);
+
+        await controller.Setting(new SettingModel { SettingType = "childminder" }, CancellationToken.None);
+
+        Assert.Null(account.LocalAuthority);
+        Assert.Null(account.RoleType);
+        Assert.Null(account.RoleTypeOther);
+        Assert.Null(account.EarlyYearsExperience);
+        Assert.IsType<ViewResult>(await controller.CompleteRegistration(CancellationToken.None));
+        Assert.False(account.IsRegistrationComplete);
+    }
+
+    [Theory]
+    [InlineData("england", "nursery", "Practitioner", null)]
+    [InlineData("scotland", "nursery", "other", "Custom educator")]
+    [InlineData("england", "childminder", "Childminder", null)]
+    [InlineData("england", "council", null, null)]
+    [InlineData("scotland", "training", null, null)]
+    [InlineData("england", "other", "other", "Custom educator")]
+    public async Task RegistrationConditionalBranchesCanComplete(
+        string country, string setting, string? role, string? roleOther)
+    {
+        var account = new UserAccount("subject-1", "person@example.test");
+        var controller = RegistrationControllerFor(account);
+        Assert.Equal("Name", Assert.IsType<RedirectToActionResult>(
+            await controller.Terms(new TermsModel { Accepted = true }, CancellationToken.None)).ActionName);
+        Assert.Equal("Location", Assert.IsType<RedirectToActionResult>(
+            await controller.Name(new NameModel { FirstName = "Alex", LastName = "Example" }, CancellationToken.None)).ActionName);
+        Assert.Equal("Setting", Assert.IsType<RedirectToActionResult>(
+            await controller.Location(new LocationModel { Country = country }, CancellationToken.None)).ActionName);
+        Assert.Equal("LocalAuthority", Assert.IsType<RedirectToActionResult>(
+            await controller.Setting(new SettingModel
+            {
+                SettingType = setting, SettingTypeOther = setting == "other" ? "Custom setting" : null
+            }, CancellationToken.None)).ActionName);
+
+        if (account.SettingRequiresLocalAuthority && account.Country == "England")
+        {
+            Assert.IsType<ViewResult>(await controller.LocalAuthority(CancellationToken.None));
+            Assert.Equal("Role", Assert.IsType<RedirectToActionResult>(
+                await controller.LocalAuthority(new LocalAuthorityModel { LocalAuthority = "example" },
+                    CancellationToken.None)).ActionName);
+            Assert.Equal("Example council", account.LocalAuthority);
+        }
+        else
+        {
+            Assert.Equal("Role", Assert.IsType<RedirectToActionResult>(
+                await controller.LocalAuthority(CancellationToken.None)).ActionName);
+            Assert.Null(account.LocalAuthority);
+        }
+        if (account.RoleGroup == "none")
+        {
+            Assert.Equal("Preferences", Assert.IsType<RedirectToActionResult>(
+                await controller.Role(CancellationToken.None)).ActionName);
+            Assert.Equal("Preferences", Assert.IsType<RedirectToActionResult>(
+                await controller.Experience(CancellationToken.None)).ActionName);
+            Assert.Equal("N/A", account.RoleType);
+            Assert.Null(account.EarlyYearsExperience);
+        }
+        else
+        {
+            Assert.Equal("Experience", Assert.IsType<RedirectToActionResult>(
+                await controller.Role(new RoleModel { RoleType = role!, RoleTypeOther = roleOther },
+                    CancellationToken.None)).ActionName);
+            Assert.Equal("Preferences", Assert.IsType<RedirectToActionResult>(
+                await controller.Experience(new ExperienceModel { EarlyYearsExperience = "new" },
+                    CancellationToken.None)).ActionName);
+            Assert.Equal(role, account.RoleType);
+            Assert.Equal(roleOther, account.RoleTypeOther);
+        }
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Preferences(new PreferencesModel { TrainingEmails = false, ResearchParticipant = true },
+                CancellationToken.None)).ActionName);
+        Assert.IsType<ViewResult>(await controller.CheckAnswers(CancellationToken.None));
+        Assert.False(account.IsRegistrationComplete);
+        Assert.Equal("Training", Assert.IsType<RedirectToActionResult>(
+            await controller.CompleteRegistration(CancellationToken.None)).ControllerName);
+        Assert.True(account.IsRegistrationComplete);
+    }
+
+    private static RegistrationController RegistrationControllerFor(UserAccount account) =>
+        new(new AccountService(new InMemoryAccountStore(account), new InMemoryNoteStore(), TimeProvider.System),
+            new AccountTestOptions())
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "subject-1")], "test"))
+                }
+            }
+        };
+
+    [Fact]
+    public async Task AccountSettingPrefillsAndChoosingANewSettingDoesNotSave()
+    {
+        var (controller, account) = AccountNameController();
+        var before = Assert.IsType<ViewResult>(await controller.Setting(CancellationToken.None));
+        var initial = Assert.IsType<AccountSettingModel>(before.Model);
+        Assert.Equal("other", initial.SettingType);
+        Assert.Equal("Example setting", initial.SettingTypeOther);
+        Assert.False(initial.ShowDetails);
+
+        var result = Assert.IsType<ViewResult>(await controller.Setting(
+            new AccountSettingModel { SettingType = "nursery" }, "details", CancellationToken.None));
+        var details = Assert.IsType<AccountSettingModel>(result.Model);
+
+        Assert.True(details.ShowDetails);
+        Assert.Equal("Nursery", details.SelectedSetting?.Name);
+        Assert.Contains(details.Roles, role => role.Name == "Practitioner");
+        Assert.Contains(details.Roles, role => role.Name == "other");
+        Assert.Equal("other", account.SettingType);
+        Assert.Equal("Example setting", account.SettingTypeOther);
+        Assert.False(controller.TempData.ContainsKey("Status"));
+    }
+
+    [Fact]
+    public async Task AccountSettingSavesDependentAnswersTogetherAndPreservesUnrelatedDetails()
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateLocation("England", null);
+        var completed = account.RegistrationCompletedAt;
+
+        var result = await controller.Setting(new AccountSettingModel
+        {
+            SettingType = "nursery", LocalAuthority = "example",
+            RoleType = "other", RoleTypeOther = "  Custom educator  ", EarlyYearsExperience = "experienced"
+        }, "save", CancellationToken.None);
+
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(result).ActionName);
+        Assert.Equal("nursery", account.SettingType);
+        Assert.Null(account.SettingTypeOther);
+        Assert.True(account.SettingRequiresLocalAuthority);
+        Assert.Equal("other", account.RoleGroup);
+        Assert.Equal("Example council", account.LocalAuthority);
+        Assert.Equal("other", account.RoleType);
+        Assert.Equal("Custom educator", account.RoleTypeOther);
+        Assert.Equal("experienced", account.EarlyYearsExperience);
+        Assert.Equal("England", account.Country);
+        Assert.Equal("Alex", account.FirstName);
+        Assert.False(account.TrainingEmails);
+        Assert.False(account.ResearchParticipant);
+        Assert.Equal(completed, account.RegistrationCompletedAt);
+        Assert.Equal("You have updated your details.", controller.TempData["Status"]);
+    }
+
+    [Theory]
+    [InlineData("unknown", "example", "Practitioner", "experienced", null)]
+    [InlineData("nursery", null, "Practitioner", "experienced", null)]
+    [InlineData("council", null, "Practitioner", "experienced", null)]
+    [InlineData("nursery", "unknown", "Practitioner", "experienced", null)]
+    [InlineData("nursery", "example", "Childminder", "experienced", null)]
+    [InlineData("childminder", "example", "Practitioner", "experienced", null)]
+    [InlineData("nursery", "example", "Practitioner", "unknown", null)]
+    [InlineData("nursery", "example", "other", "experienced", " ")]
+    [InlineData("other", "example", "Practitioner", "experienced", null)]
+    public async Task InvalidAccountSettingLeavesAllSavedAnswersUntouched(
+        string setting, string? authority, string role, string experience, string? other)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateLocation("England", null);
+        var input = new AccountSettingModel
+        {
+            SettingType = setting, LocalAuthority = authority, RoleType = role,
+            EarlyYearsExperience = experience, RoleTypeOther = other,
+            RequiresLocalAuthority = false,
+            Roles = [new("forged", role)]
+        };
+
+        var result = Assert.IsType<ViewResult>(await controller.Setting(input, "save", CancellationToken.None));
+
+        Assert.Same(input, result.Model);
+        Assert.False(controller.ModelState.IsValid);
+        Assert.NotEmpty(input.Settings);
+        Assert.Equal("other", account.SettingType);
+        Assert.Equal("Example setting", account.SettingTypeOther);
+        Assert.Equal("N/A", account.RoleType);
+        Assert.Null(account.EarlyYearsExperience);
+        Assert.Null(account.LocalAuthority);
+        Assert.True(account.IsRegistrationComplete);
+        Assert.False(controller.TempData.ContainsKey("Status"));
+    }
+
+    [Theory]
+    [InlineData("England", "training")]
+    [InlineData("Scotland", "nursery")]
+    public async Task AccountSettingClearsAnswersThatDoNotApply(string country, string setting)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("other", "Old setting", true, "other");
+        account.UpdateLocation(country, "Example council");
+        account.UpdateRole("other", "Old role");
+        account.UpdateExperience("new");
+
+        var result = await controller.Setting(new AccountSettingModel
+        {
+            SettingType = setting, SettingTypeOther = "Forged extra",
+            LocalAuthority = "unknown", RoleType = "Practitioner", RoleTypeOther = "Forged extra",
+            EarlyYearsExperience = "experienced"
+        }, "save", CancellationToken.None);
+
+        Assert.IsType<RedirectToActionResult>(result);
+        Assert.Null(account.LocalAuthority);
+        Assert.Null(account.SettingTypeOther);
+        Assert.Null(account.RoleTypeOther);
+        Assert.Equal(setting == "training" ? "N/A" : "Practitioner", account.RoleType);
+        Assert.Equal(setting == "training" ? null : "experienced", account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task AccountSettingSupportsCustomSettingAndUnchangedSettingPrefill()
+    {
+        var (controller, account) = AccountNameController();
+        var result = await controller.Setting(new AccountSettingModel
+        {
+            SettingType = "other", SettingTypeOther = "  Custom setting  ",
+            RoleType = "Practitioner", EarlyYearsExperience = "new"
+        }, "save", CancellationToken.None);
+        Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal("Custom setting", account.SettingTypeOther);
+
+        var details = Assert.IsType<AccountSettingModel>(Assert.IsType<ViewResult>(
+            await controller.Setting(new AccountSettingModel
+            {
+                SettingType = "other", SettingTypeOther = "Custom setting"
+            }, "details", CancellationToken.None)).Model);
+        Assert.Equal("Practitioner", details.RoleType);
+        Assert.Equal("new", details.EarlyYearsExperience);
+        Assert.False(details.RequiresLocalAuthority);
+    }
+
+    [Fact]
+    public async Task AccountSettingRoutesRequireRegisteredCurrentAccountAndKnownStage()
+    {
+        var (controller, _) = AccountNameController();
+        Assert.IsType<BadRequestResult>(await controller.Setting(
+            new AccountSettingModel { SettingType = "training" }, "unknown", CancellationToken.None));
+        var (unregistered, _) = AccountNameController(registered: false);
+        foreach (var result in new[]
+        {
+            await unregistered.Setting(CancellationToken.None),
+            await unregistered.Setting(new AccountSettingModel(), "save", CancellationToken.None)
+        })
+        {
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Registration", redirect.ControllerName);
+            Assert.Equal("Terms", redirect.ActionName);
+        }
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        Assert.IsType<NotFoundResult>(await controller.Setting(CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Setting(
+            new AccountSettingModel(), "save", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AccountSettingFieldValidationKeepsDependentAnswersVisible()
+    {
+        var (controller, account) = AccountNameController();
+        controller.ModelState.AddModelError(nameof(AccountSettingModel.RoleTypeOther), "Maximum length is 200.");
+        var input = new AccountSettingModel
+        {
+            SettingType = "nursery", RoleType = "other", RoleTypeOther = new string('x', 201),
+            EarlyYearsExperience = "new"
+        };
+
+        var result = Assert.IsType<ViewResult>(await controller.Setting(input, "save", CancellationToken.None));
+
+        Assert.True(Assert.IsType<AccountSettingModel>(result.Model).ShowDetails);
+        Assert.NotEmpty(input.Roles);
+        Assert.Equal("other", account.SettingType);
+        Assert.Equal("Example setting", account.SettingTypeOther);
+    }
+
+    [Fact]
+    public async Task AccountSettingDetailsArePersistedWithOneStoreSave()
+    {
+        var account = new UserAccount("subject", "person@example.test");
+        account.UpdateLocation("England", null);
+        var store = new InMemoryAccountStore(account);
+        var service = new AccountService(store, new InMemoryNoteStore(), TimeProvider.System);
+
+        await service.UpdateSettingDetailsAsync(account, new("nursery", "Nursery", true, "other"),
+            null, "Example council", "Practitioner", null, "new", CancellationToken.None);
+
+        Assert.Equal(1, store.SaveCount);
+        Assert.Equal("Example council", account.LocalAuthority);
+        Assert.Equal("Practitioner", account.RoleType);
+        Assert.Equal("new", account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task AccountSettingCanRequireAuthorityWithoutRoleOrExperience()
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateLocation("England", null);
+
+        var result = await controller.Setting(new AccountSettingModel
+        {
+            SettingType = "council", LocalAuthority = "example"
+        }, "save", CancellationToken.None);
+
+        Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal("council", account.SettingType);
+        Assert.Equal("Example council", account.LocalAuthority);
+        Assert.Equal("N/A", account.RoleType);
+        Assert.Null(account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task AccountRolePrefillsAndSavesRoleAndExperienceWithoutChangingSetting()
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("nursery", null, true, "other");
+        account.UpdateLocation("England", "Example council");
+        account.UpdateRole("Practitioner", null);
+        account.UpdateExperience("new");
+        var before = Assert.IsType<ViewResult>(await controller.Role(CancellationToken.None));
+        var model = Assert.IsType<AccountRoleModel>(before.Model);
+        Assert.Equal("Practitioner", model.RoleType);
+        Assert.Equal("new", model.EarlyYearsExperience);
+        Assert.NotEmpty(model.Roles);
+
+        var result = await controller.Role(new AccountRoleModel
+        {
+            RoleType = "other", RoleTypeOther = "Custom educator", EarlyYearsExperience = "experienced"
+        }, CancellationToken.None);
+
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(result).ActionName);
+        Assert.Equal("other", account.RoleType);
+        Assert.Equal("Custom educator", account.RoleTypeOther);
+        Assert.Equal("experienced", account.EarlyYearsExperience);
+        Assert.Equal("nursery", account.SettingType);
+        Assert.Equal("Example council", account.LocalAuthority);
+        Assert.Equal("You have updated your details.", controller.TempData["Status"]);
+        Assert.True(account.IsRegistrationComplete);
+    }
+
+    [Theory]
+    [InlineData("unknown", null, "experienced")]
+    [InlineData("Practitioner", null, "unknown")]
+    [InlineData("other", " ", "experienced")]
+    [InlineData("Childminder", null, "experienced")]
+    public async Task InvalidAccountRoleDoesNotChangeEitherSavedValue(string role, string? other, string experience)
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("nursery", null, false, "other");
+        account.UpdateRole("Practitioner", null);
+        account.UpdateExperience("new");
+        var input = new AccountRoleModel { RoleType = role, RoleTypeOther = other, EarlyYearsExperience = experience };
+
+        var result = Assert.IsType<ViewResult>(await controller.Role(input, CancellationToken.None));
+
+        Assert.Same(input, result.Model);
+        Assert.NotEmpty(input.Roles);
+        Assert.NotEmpty(input.Experiences);
+        Assert.False(controller.ModelState.IsValid);
+        Assert.Equal("Practitioner", account.RoleType);
+        Assert.Equal("new", account.EarlyYearsExperience);
+        Assert.False(controller.TempData.ContainsKey("Status"));
+    }
+
+    [Fact]
+    public async Task StandardAccountRoleClearsOldCustomDescription()
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("nursery", null, false, "other");
+        account.UpdateRole("other", "Custom role");
+        account.UpdateExperience("new");
+
+        await controller.Role(new AccountRoleModel
+        {
+            RoleType = "Practitioner", RoleTypeOther = "Forged extra", EarlyYearsExperience = "experienced"
+        }, CancellationToken.None);
+
+        Assert.Equal("Practitioner", account.RoleType);
+        Assert.Null(account.RoleTypeOther);
+        Assert.Equal("experienced", account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task AccountRoleUsesCurrentSettingGroupAndDoesNotAcceptForgedChoices()
+    {
+        var (controller, account) = AccountNameController();
+        account.UpdateSetting("childminder", null, false, "childminder");
+        account.UpdateRole("Childminder", null);
+        account.UpdateExperience("new");
+        var initial = Assert.IsType<ViewResult>(await controller.Role(CancellationToken.None));
+        Assert.Equal("Childminder", Assert.Single(Assert.IsType<AccountRoleModel>(initial.Model).Roles).Name);
+
+        var invalid = await controller.Role(new AccountRoleModel
+        {
+            RoleType = "other", RoleTypeOther = "Bypass", EarlyYearsExperience = "new",
+            Roles = [new("other", "other")]
+        }, CancellationToken.None);
+
+        Assert.IsType<ViewResult>(invalid);
+        Assert.Equal("Childminder", account.RoleType);
+        Assert.Null(account.RoleTypeOther);
+    }
+
+    [Fact]
+    public async Task AccountRoleRoutesRejectInapplicableAndUnregisteredEdits()
+    {
+        var (controller, account) = AccountNameController();
+        var input = new AccountRoleModel { RoleType = "Practitioner", EarlyYearsExperience = "new" };
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(
+            await controller.Role(CancellationToken.None)).ActionName);
+        Assert.Equal("Index", Assert.IsType<RedirectToActionResult>(
+            await controller.Role(input, CancellationToken.None)).ActionName);
+        Assert.Equal("N/A", account.RoleType);
+        var (unregistered, _) = AccountNameController(registered: false);
+        foreach (var result in new[]
+        {
+            await unregistered.Role(CancellationToken.None),
+            await unregistered.Role(input, CancellationToken.None)
+        })
+        {
+            var redirect = Assert.IsType<RedirectToActionResult>(result);
+            Assert.Equal("Registration", redirect.ControllerName);
+            Assert.Equal("Terms", redirect.ActionName);
+        }
+        controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity());
+        Assert.IsType<NotFoundResult>(await controller.Role(CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Role(input, CancellationToken.None));
+    }
+
     [Fact]
     public async Task AccountLocationPrefillsReferenceIdsAndSavesCountryAndAuthorityTogether()
     {
@@ -283,10 +883,19 @@ public sealed class TrainingJourneyServiceTests
             [new("england", "England"), new("scotland", "Scotland")];
         public IReadOnlyList<RegistrationChoice> GetLocalAuthorities() =>
             [new("example", "Example council"), new("other", "Other council")];
-        public IReadOnlyList<RegistrationChoice> GetExperiences() => [];
-        public IReadOnlyList<RegistrationChoice> GetRoles(string roleGroup) => [];
+        public IReadOnlyList<RegistrationChoice> GetExperiences() =>
+            [new("new", "New to early years"), new("experienced", "Experienced")];
+        public IReadOnlyList<RegistrationChoice> GetRoles(string roleGroup) => roleGroup == "other"
+            ? [new("practitioner", "Practitioner")]
+            : [new("childminder", "Childminder")];
         public Task<IReadOnlyList<RegistrationSetting>> GetSettingsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<RegistrationSetting>>([]);
+            Task.FromResult<IReadOnlyList<RegistrationSetting>>(
+            [
+                new("nursery", "Nursery", true, "other"),
+                new("childminder", "Childminder", false, "childminder"),
+                new("council", "Local authority", true, "none"),
+                new("training", "Training provider", false, "none")
+            ]);
     }
 
     [Fact]
@@ -1105,12 +1714,18 @@ public sealed class TrainingJourneyServiceTests
 
     private sealed class InMemoryAccountStore(UserAccount account) : IUserAccountStore
     {
+        public int SaveCount { get; private set; }
+
         public Task<UserAccount?> FindByGovOneSubjectAsync(string subject, CancellationToken cancellationToken) =>
             Task.FromResult<UserAccount?>(subject == account.GovOneSubject ? account : null);
 
         public Task AddAsync(UserAccount userAccount, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SaveChangesAsync(CancellationToken cancellationToken)
+        {
+            SaveCount++;
+            return Task.CompletedTask;
+        }
     }
 
     [Fact]

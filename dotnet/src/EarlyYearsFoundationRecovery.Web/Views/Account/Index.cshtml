@@ -1,4 +1,5 @@
 @model EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount
+@inject EarlyYearsFoundationRecovery.Application.Contracts.IRegistrationOptionsProvider RegistrationOptions
 @{
     ViewData["Title"] = "My account";
 }
@@ -23,6 +24,26 @@
         <dd>@(Model.SettingRequiresLocalAuthority && Model.Country == "England" ? Model.LocalAuthority : "Not applicable")</dd>
     </dl>
     <p><a asp-controller="Account" asp-action="Location">Change where you live</a></p>
+    <h2>Setting</h2>
+    var setting = (await RegistrationOptions.GetSettingsAsync(Context.RequestAborted))
+        .SingleOrDefault(item => item.Id == Model.SettingType);
+    <p>@(Model.SettingType == "other" ? Model.SettingTypeOther : setting?.Name ?? Model.SettingType)</p>
+    <p><a asp-controller="Account" asp-action="Setting">Change setting</a></p>
+    <h2>Role and experience</h2>
+    @if (Model.RoleGroup == "none")
+    {
+        <p>Not applicable</p>
+    }
+    else
+    {
+        <dl class="summary-list">
+            <dt>Role</dt>
+            <dd>@(Model.RoleType == "other" ? Model.RoleTypeOther : Model.RoleType)</dd>
+            <dt>Early years experience</dt>
+            <dd>@(RegistrationOptions.GetExperiences().SingleOrDefault(item => item.Id == Model.EarlyYearsExperience)?.Name ?? Model.EarlyYearsExperience)</dd>
+        </dl>
+        <p><a asp-controller="Account" asp-action="Role">Change role and experience</a></p>
+    }
     <h2>Email preferences</h2>
     <p>@(Model.TrainingEmails == true ? "You have chosen to receive emails about this training course." : "You have chosen not to receive emails about this training course.")</p>
     <p><a asp-controller="Account" asp-action="EmailPreferences">Change email preferences</a></p>

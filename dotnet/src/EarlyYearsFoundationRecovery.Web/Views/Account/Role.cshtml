@@ -1,0 +1,41 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AccountRoleModel
+@{
+    ViewData["Title"] = "Change role and experience";
+}
+<h1>Change role and experience</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-controller="Account" asp-action="Role" method="post">
+    <div class="form-group">
+        <label asp-for="RoleType">Role</label>
+        <select asp-for="RoleType" class="select-input">
+            <option value="">Select a role</option>
+            @foreach (var role in Model.Roles)
+            {
+                <option value="@role.Name">@role.Name</option>
+            }
+        </select>
+        <span asp-validation-for="RoleType" class="field-error"></span>
+    </div>
+    @if (Model.Roles.Any(role => role.Name == "other"))
+    {
+        <div class="form-group">
+            <label asp-for="RoleTypeOther">Describe your role</label>
+            <p id="role-hint">Only complete this if you selected other.</p>
+            <input asp-for="RoleTypeOther" class="text-input" aria-describedby="role-hint" />
+            <span asp-validation-for="RoleTypeOther" class="field-error"></span>
+        </div>
+    }
+    <div class="form-group">
+        <label asp-for="EarlyYearsExperience">How long have you worked in early years?</label>
+        <select asp-for="EarlyYearsExperience" class="select-input">
+            <option value="">Select an answer</option>
+            @foreach (var experience in Model.Experiences)
+            {
+                <option value="@experience.Id">@experience.Name</option>
+            }
+        </select>
+        <span asp-validation-for="EarlyYearsExperience" class="field-error"></span>
+    </div>
+    <button class="button" type="submit">Save</button>
+</form>
+<p><a asp-controller="Account" asp-action="Index">Cancel</a></p>

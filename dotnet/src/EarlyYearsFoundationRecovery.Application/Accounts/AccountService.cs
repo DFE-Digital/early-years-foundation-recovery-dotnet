@@ -84,6 +84,28 @@ public sealed class AccountService(
         await accounts.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task UpdateSettingDetailsAsync(
+        UserAccount account,
+        RegistrationSetting setting,
+        string? settingOther,
+        string? localAuthority,
+        string? roleType,
+        string? roleOther,
+        string? experience,
+        CancellationToken cancellationToken)
+    {
+        var country = account.Country ??
+            throw new InvalidOperationException("Set the account country before changing setting details.");
+        account.UpdateSetting(setting.Id, settingOther, setting.RequiresLocalAuthority, setting.RoleGroup);
+        account.UpdateLocation(country, localAuthority);
+        if (setting.RoleGroup != "none")
+        {
+            account.UpdateRole(roleType, roleOther);
+            account.UpdateExperience(experience);
+        }
+        await accounts.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task UpdateRoleAsync(
         UserAccount account,
         string? roleType,
@@ -99,6 +121,18 @@ public sealed class AccountService(
         string? experience,
         CancellationToken cancellationToken)
     {
+        account.UpdateExperience(experience);
+        await accounts.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpdateRoleAndExperienceAsync(
+        UserAccount account,
+        string roleType,
+        string? other,
+        string experience,
+        CancellationToken cancellationToken)
+    {
+        account.UpdateRole(roleType, other);
         account.UpdateExperience(experience);
         await accounts.SaveChangesAsync(cancellationToken);
     }

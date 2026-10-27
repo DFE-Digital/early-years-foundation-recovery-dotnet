@@ -115,6 +115,200 @@ public sealed class AccountController(
         EditPreferenceAsync(false, cancellationToken);
 
     [Authorize]
+    [HttpGet("role")]
+    public async Task<IActionResult> Role(CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        if (account.RoleGroup == "none")
+        {
+            return RedirectToAction(nameof(Index));
+        }
+        var model = new AccountRoleModel
+        {
+            RoleType = account.RoleType ?? string.Empty,
+            RoleTypeOther = account.RoleTypeOther,
+            EarlyYearsExperience = account.EarlyYearsExperience ?? string.Empty
+        };
+        PopulateRoleChoices(model, account);
+        return View(model);
+    }
+
+    [Authorize]
+    [HttpGet("setting")]
+    public async Task<IActionResult> Setting(CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        return View(new AccountSettingModel
+        {
+            SettingType = account.SettingType ?? string.Empty,
+            SettingTypeOther = account.SettingTypeOther,
+            Settings = await options.GetSettingsAsync(cancellationToken)
+        });
+    }
+
+    [Authorize]
+    [HttpPost("setting")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Setting(
+        AccountSettingModel model, string? stage, CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        if (stage is not ("details" or "save"))
+        {
+            return BadRequest();
+        }
+        model.Settings = await options.GetSettingsAsync(cancellationToken);
+        var setting = model.SettingType == "other"
+            ? new RegistrationSetting("other", "Other", true, "other")
+            : model.Settings.SingleOrDefault(item => item.Id == model.SettingType);
+        if (setting is null)
+        {
+            ModelState.AddModelError(nameof(model.SettingType), "Select a valid setting type.");
+        }
+        if (model.SettingType == "other" && string.IsNullOrWhiteSpace(model.SettingTypeOther))
+        {
+            ModelState.AddModelError(nameof(model.SettingTypeOther), "Describe your setting.");
+        }
+        if (setting is null ||
+            ModelState[nameof(model.SettingType)]?.Errors.Count > 0 ||
+            ModelState[nameof(model.SettingTypeOther)]?.Errors.Count > 0)
+        {
+            return View(model);
+        }
+        model.SelectedSetting = setting;
+        model.ShowDetails = true;
+        model.RequiresLocalAuthority = setting.RequiresLocalAuthority &&
+            string.Equals(account.Country, "England", StringComparison.OrdinalIgnoreCase);
+        model.LocalAuthorities = options.GetLocalAuthorities();
+        model.Roles = setting.RoleGroup == "none" ? [] : options.GetRoleChoices(setting.RoleGroup);
+        model.Experiences = options.GetExperiences();
+
+        if (stage == "details")
+        {
+            var unchangedSetting = account.SettingType == setting.Id;
+            model.LocalAuthority = unchangedSetting
+                ? model.LocalAuthorities.SingleOrDefault(item => item.Name == account.LocalAuthority)?.Id
+                : null;
+            model.RoleType = unchangedSetting ? account.RoleType : null;
+            model.RoleTypeOther = unchangedSetting ? account.RoleTypeOther : null;
+            model.EarlyYearsExperience = unchangedSetting ? account.EarlyYearsExperience : null;
+            foreach (var field in new[]
+            {
+                nameof(model.LocalAuthority), nameof(model.RoleType),
+                nameof(model.RoleTypeOther), nameof(model.EarlyYearsExperience)
+            })
+            {
+                ModelState.Remove(field);
+            }
+            return View(model);
+        }
+
+        var authority = model.RequiresLocalAuthority
+            ? model.LocalAuthorities.SingleOrDefault(item => item.Id == model.LocalAuthority)
+            : null;
+        if (model.RequiresLocalAuthority && authority is null)
+        {
+            ModelState.AddModelError(nameof(model.LocalAuthority), "Select a valid local authority.");
+        }
+        if (setting.RoleGroup != "none")
+        {
+            ValidateRoleChoices(model.RoleType, model.RoleTypeOther, model.EarlyYearsExperience,
+                model.Roles, model.Experiences);
+        }
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+        await accounts.UpdateSettingDetailsAsync(
+            account, setting, model.SettingTypeOther?.Trim(), authority?.Name,
+            model.RoleType, model.RoleTypeOther?.Trim(), model.EarlyYearsExperience, cancellationToken);
+        TempData["Status"] = "You have updated your details.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize]
+    [HttpPost("role")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Role(AccountRoleModel model, CancellationToken cancellationToken)
+    {
+        var account = await GetCurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        if (account.RoleGroup == "none")
+        {
+            return RedirectToAction(nameof(Index));
+        }
+        PopulateRoleChoices(model, account);
+        ValidateRoleChoices(model.RoleType, model.RoleTypeOther, model.EarlyYearsExperience,
+            model.Roles, model.Experiences);
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+        await accounts.UpdateRoleAndExperienceAsync(
+            account, model.RoleType, model.RoleTypeOther?.Trim(), model.EarlyYearsExperience, cancellationToken);
+        TempData["Status"] = "You have updated your details.";
+        return RedirectToAction(nameof(Index));
+    }
+
+    private void PopulateRoleChoices(AccountRoleModel model, UserAccount account)
+    {
+        model.Roles = options.GetRoleChoices(account.RoleGroup ?? "other");
+        model.Experiences = options.GetExperiences();
+    }
+
+    private void ValidateRoleChoices(
+        string? roleType,
+        string? roleOther,
+        string? experience,
+        IReadOnlyList<RegistrationChoice> roles,
+        IReadOnlyList<RegistrationChoice> experiences)
+    {
+        if (!roles.Any(role => role.Name == roleType))
+        {
+            ModelState.AddModelError(nameof(AccountRoleModel.RoleType), "Select a valid role.");
+        }
+        if (roleType == "other" && string.IsNullOrWhiteSpace(roleOther))
+        {
+            ModelState.AddModelError(nameof(AccountRoleModel.RoleTypeOther), "Describe your role.");
+        }
+        if (!experiences.Any(item => item.Id == experience))
+        {
+            ModelState.AddModelError(nameof(AccountRoleModel.EarlyYearsExperience), "Select a valid experience option.");
+        }
+    }
+
+    [Authorize]
     [HttpGet("location")]
     public async Task<IActionResult> Location(CancellationToken cancellationToken)
     {

@@ -5,7 +5,7 @@
 }
 <h1>What is your role?</h1>
 <div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
-<form asp-action="Role" method="post">
+<form asp-controller="Registration" asp-action="Role" method="post">
     <div class="form-group">
         <label asp-for="RoleType">Role</label>
         <select asp-for="RoleType" class="select-input">
@@ -17,11 +17,12 @@
         </select>
         <span asp-validation-for="RoleType" class="field-error"></span>
     </div>
-    @if (string.Equals(Model.RoleType, "other", StringComparison.OrdinalIgnoreCase))
+    @if (roles.Any(role => role.Name == "other"))
     {
         <div class="form-group">
             <label asp-for="RoleTypeOther">Describe your role</label>
-            <input asp-for="RoleTypeOther" class="text-input" />
+            <p id="role-hint">Only complete this if you selected other.</p>
+            <input asp-for="RoleTypeOther" class="text-input" aria-describedby="role-hint" />
             <span asp-validation-for="RoleTypeOther" class="field-error"></span>
         </div>
     }

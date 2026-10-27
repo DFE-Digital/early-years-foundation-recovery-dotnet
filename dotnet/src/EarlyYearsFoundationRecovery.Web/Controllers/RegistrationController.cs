@@ -181,7 +181,8 @@ public sealed class RegistrationController(
         ViewBag.LocalAuthorities = options.GetLocalAuthorities();
         return View(new LocalAuthorityModel
         {
-            LocalAuthority = account.LocalAuthority ?? string.Empty
+            LocalAuthority = options.GetLocalAuthorities()
+                .SingleOrDefault(item => item.Name == account.LocalAuthority)?.Id ?? string.Empty
         });
     }
 
@@ -191,6 +192,17 @@ public sealed class RegistrationController(
         LocalAuthorityModel model,
         CancellationToken cancellationToken)
     {
+        var account = await CurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+
+        if (!RequiresLocalAuthority(account))
+        {
+            return RedirectToAction(nameof(Role));
+        }
+
         var authority = options.GetLocalAuthorities()
             .SingleOrDefault(item => item.Id == model.LocalAuthority);
         if (authority is null)
@@ -202,12 +214,6 @@ public sealed class RegistrationController(
         {
             ViewBag.LocalAuthorities = options.GetLocalAuthorities();
             return View(model);
-        }
-
-        var account = await CurrentAccountAsync(cancellationToken);
-        if (account is null)
-        {
-            return NotFound();
         }
 
         await accounts.UpdateLocalAuthorityAsync(account, authority!.Name, cancellationToken);
@@ -228,7 +234,7 @@ public sealed class RegistrationController(
             return RedirectToAction(nameof(Preferences));
         }
 
-        ViewBag.Roles = options.GetRoles(account.RoleGroup ?? "other");
+        ViewBag.Roles = options.GetRoleChoices(account.RoleGroup ?? "other");
         return View(new RoleModel
         {
             RoleType = account.RoleType ?? string.Empty,
@@ -251,7 +257,7 @@ public sealed class RegistrationController(
             return RedirectToAction(nameof(Preferences));
         }
 
-        var roles = options.GetRoles(account.RoleGroup ?? "other");
+        var roles = options.GetRoleChoices(account.RoleGroup ?? "other");
         if (!roles.Any(role => role.Name == model.RoleType))
         {
             ModelState.AddModelError(nameof(model.RoleType), "Select a valid role.");
@@ -272,7 +278,7 @@ public sealed class RegistrationController(
         await accounts.UpdateRoleAsync(
             account,
             model.RoleType,
-            model.RoleTypeOther,
+            model.RoleTypeOther?.Trim(),
             cancellationToken);
         return RedirectToAction(nameof(Experience));
     }
@@ -373,11 +379,7 @@ public sealed class RegistrationController(
             return NotFound();
         }
 
-        var setting = (await options.GetSettingsAsync(cancellationToken))
-            .SingleOrDefault(item => item.Id == account.SettingType);
-        ViewBag.SettingName = account.SettingType == "other"
-            ? account.SettingTypeOther
-            : setting?.Name ?? account.SettingType;
+        await PopulateSummaryAsync(account, cancellationToken);
         return View(account);
     }
 
@@ -394,10 +396,22 @@ public sealed class RegistrationController(
         if (!await accounts.CompleteRegistrationAsync(account, cancellationToken))
         {
             ModelState.AddModelError(string.Empty, "Complete the required registration steps before continuing.");
+            await PopulateSummaryAsync(account, cancellationToken);
             return View("CheckAnswers", account);
         }
 
         return RedirectToAction("Index", "Training");
+    }
+
+    private async Task PopulateSummaryAsync(UserAccount account, CancellationToken cancellationToken)
+    {
+        var setting = (await options.GetSettingsAsync(cancellationToken))
+            .SingleOrDefault(item => item.Id == account.SettingType);
+        ViewBag.SettingName = account.SettingType == "other"
+            ? account.SettingTypeOther
+            : setting?.Name ?? account.SettingType;
+        ViewBag.ExperienceName = options.GetExperiences()
+            .SingleOrDefault(item => item.Id == account.EarlyYearsExperience)?.Name ?? account.EarlyYearsExperience;
     }
 
     private static bool RequiresLocalAuthority(UserAccount account) =>

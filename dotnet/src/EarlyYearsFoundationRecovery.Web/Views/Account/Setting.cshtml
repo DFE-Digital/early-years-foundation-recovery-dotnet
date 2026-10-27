@@ -1,0 +1,90 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AccountSettingModel
+@{
+    ViewData["Title"] = "Change setting";
+}
+<h1>Change setting</h1>
+<p>Your saved details will not change until you select Save. You may need to answer new questions about your setting.</p>
+<div asp-validation-summary="All" class="validation-summary" role="alert"></div>
+<form asp-controller="Account" asp-action="Setting" method="post">
+    @if (!Model.ShowDetails)
+    {
+        <input type="hidden" name="stage" value="details" />
+        <div class="form-group">
+            <label asp-for="SettingType">Setting</label>
+            <select asp-for="SettingType" class="select-input">
+                <option value="">Select a setting</option>
+                @foreach (var setting in Model.Settings.Where(setting => setting.Id != "other"))
+                {
+                    <option value="@setting.Id">@setting.Name</option>
+                }
+                <option value="other">Other</option>
+            </select>
+            <span asp-validation-for="SettingType" class="field-error"></span>
+        </div>
+        <div class="form-group">
+            <label asp-for="SettingTypeOther">Describe your setting</label>
+            <p id="setting-hint">Only complete this if you selected Other.</p>
+            <input asp-for="SettingTypeOther" class="text-input" aria-describedby="setting-hint" />
+            <span asp-validation-for="SettingTypeOther" class="field-error"></span>
+        </div>
+        <button class="button" type="submit">Continue</button>
+    }
+    else
+    {
+        <input type="hidden" name="stage" value="save" />
+        <input asp-for="SettingType" type="hidden" />
+        <input asp-for="SettingTypeOther" type="hidden" />
+        <h2>@(Model.SettingType == "other" ? Model.SettingTypeOther : Model.SelectedSetting?.Name)</h2>
+        <p><a asp-controller="Account" asp-action="Setting">Choose a different setting</a></p>
+        @if (Model.RequiresLocalAuthority)
+        {
+            <div class="form-group">
+                <label asp-for="LocalAuthority">Local authority your setting is in</label>
+                <select asp-for="LocalAuthority" class="select-input">
+                    <option value="">Select a local authority</option>
+                    @foreach (var authority in Model.LocalAuthorities)
+                    {
+                        <option value="@authority.Id">@authority.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="LocalAuthority" class="field-error"></span>
+            </div>
+        }
+        @if (Model.SelectedSetting?.RoleGroup != "none")
+        {
+            <div class="form-group">
+                <label asp-for="RoleType">Role</label>
+                <select asp-for="RoleType" class="select-input">
+                    <option value="">Select a role</option>
+                    @foreach (var role in Model.Roles)
+                    {
+                        <option value="@role.Name">@role.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="RoleType" class="field-error"></span>
+            </div>
+            @if (Model.Roles.Any(role => role.Name == "other"))
+            {
+                <div class="form-group">
+                    <label asp-for="RoleTypeOther">Describe your role</label>
+                    <p id="role-hint">Only complete this if you selected other.</p>
+                    <input asp-for="RoleTypeOther" class="text-input" aria-describedby="role-hint" />
+                    <span asp-validation-for="RoleTypeOther" class="field-error"></span>
+                </div>
+            }
+            <div class="form-group">
+                <label asp-for="EarlyYearsExperience">How long have you worked in early years?</label>
+                <select asp-for="EarlyYearsExperience" class="select-input">
+                    <option value="">Select an answer</option>
+                    @foreach (var experience in Model.Experiences)
+                    {
+                        <option value="@experience.Id">@experience.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="EarlyYearsExperience" class="field-error"></span>
+            </div>
+        }
+        <button class="button" type="submit">Save</button>
+    }
+</form>
+<p><a asp-controller="Account" asp-action="Index">Cancel</a></p>

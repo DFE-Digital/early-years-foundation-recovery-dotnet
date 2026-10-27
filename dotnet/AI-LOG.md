@@ -517,6 +517,178 @@ Latest full Release result: **263 passed**; whitespace checks passed.
 Nothing pushed. Setting/role editing and human review of the combined location
 form remain outstanding.
 
+### Checkpoint 13: account role, setting and registration improvements
+
+**User objective:** checkpoint the account slices and continue.
+
+Saved Checkpoint 12 as `703a778a` (Add account name preference and location
+editing), including this log. Verified a clean worktree immediately after commit.
+Nothing pushed.
+
+Added authenticated `/account/role` GET/POST and a combined role/experience form.
+Both values validate before a single account-store save; setting, country,
+authority and registration completion remain unchanged. Roles come from the
+persisted setting group, not posted choices. The general group receives an explicit
+other option because the current reference list omits one despite domain support.
+Custom descriptions are required for other, encoded on display and cleared by a
+standard role. The description field is available without JavaScript. No-role
+settings show Not applicable and redirect attempted edits to My account.
+
+My account displays role/custom description, the reference-data experience label
+and an applicable edit link. Save returns with confirmation; Cancel does not submit.
+This intentionally combines Rails' separate role/experience steps for a bounded
+account save; it is documented for human review, not claimed as approved UX parity.
+Registration routes/forms are unchanged.
+
+**Red before green:** all eight initial controller/actual-Razor cases failed before
+implementation. Added childminder group/forged-choice and account-summary encoding/
+applicability coverage. Full Release suite: **274 passed**. Editor diagnostics and
+whitespace checks passed.
+
+**Manual evidence:** live HTTP checks on the childminder test account rejected
+an out-of-group role and an invalid experience choice, accepted an unchanged-value
+save returning with confirmation, retained both selections and rejected a missing
+anti-forgery token with 400. Account summary displayed Childminder and the
+10 years or more label. No overflow at 375px; app/database health remained healthy.
+Custom-role behaviour is automated controller/Razor evidence, not live CMS/account
+evidence. These are HTTP checks, not a claimed UI click journey.
+
+**Local data:** saved the development learner's existing role/experience unchanged;
+no training answers, progress or new starts were recorded. Updated README/A07.
+Setting editing and full account acceptance remain outstanding.
+This continuation is uncommitted; nothing pushed.
+
+#### Setting editing with an atomic dependent-answer save
+
+**User objective:** continue. Compared Rails setting controller/form and setting
+metadata: Rails saves the setting before collecting dependent answers, resetting
+experience and clearing non-applicable fields. A clarification request about
+separate steps versus an atomic save could not be answered because the user was
+unavailable. Chose the conservative atomic approach consistent with the recent
+account forms; this is a documented UX difference, not approved Rails parity.
+
+My account now shows the setting title or encoded custom description. Added
+authenticated GET/POST `/account/setting`: choose a setting, then complete/review
+its applicable authority, role and experience before an explicit Save. Continue
+and Cancel do not persist anything. Unchanged settings prefill saved dependent
+answers; different settings collect fresh ones. The selected reference setting
+and persisted country determine requirements, ignoring posted flags/choice lists.
+Other settings require a description; existing custom role rules are shared with
+the role edit. Invalid submissions leave all saved answers untouched. A single
+store save applies the setting and valid dependent answers, clearing irrelevant
+authority, role, experience and custom descriptions. Name, country, preferences
+and registration completion are preserved. Registration remains unchanged.
+
+**Red before green:** all 16 initial controller/actual-Razor cases failed against
+endpoint skeletons/missing view. A further regression test caught a field-length
+error returning to the choice screen instead of keeping dependent inputs visible;
+fixed the selection/detail validation boundary. Added single-save, no-role/
+authority, encoding and no-dependent-answer form coverage. Full Release suite:
+**296 passed**. Editor diagnostics and whitespace checks passed.
+
+**Manual evidence:** live authenticated HTTP checks showed that previewing another
+setting leaves the account summary unchanged; invalid setting, out-of-group role
+and forged authority-requirement submissions returned field errors. Saving the
+original setting/answers returned to My account with confirmation; reopening
+retained the original selections. Missing anti-forgery token returned 400.
+The detail form had no horizontal overflow at 375px. Tests used browser fetch and
+programmatic form submission, not a claimed successful click journey. App/database
+health remained healthy. Custom-setting saves and conditional clearing are
+automated evidence, not claimed live learner mutations.
+
+Updated README/A07; A07 remains Partial for human UX/accessibility and full
+HTTP/PostgreSQL acceptance. The development learner's existing answers were saved
+unchanged; no training answers, progress or new starts were recorded. This slice
+and the prior role/experience slice remain uncommitted; nothing pushed.
+
+#### Conditional registration: custom roles and authority revisits
+
+**User objective:** continue. Compared the Rails registration system cases and
+setting/authority/role controller branches with the .NET flow. Found the general
+role reference list omitted other, making the custom-role journey impossible;
+authority GET used a saved display name where the form expected an ID; authority
+POST lacked GET's applicability guard and could throw on skipped branches.
+
+Extracted the existing account role-choice helper for registration/account reuse.
+General registration roles now offer other with the existing required/200-character
+description rules and trimmed persistence; the description is available without
+JavaScript. Childminders retain only their reference roles. The combined .NET
+role/custom-description screen remains an explicit difference from Rails'
+separate custom-role screen. Standard roles clear old custom text.
+
+Authority revisits map saved names to choice IDs. Authority POST now resolves the
+current account and skips inapplicable country/setting branches before validating
+or mutating, matching GET. Invalid applicable choices preserve the saved answer
+and re-render reference choices. No schema or registration screen-sequence changes.
+
+**Red before green:** nine of 17 initial focused cases failed before implementation
+(the remaining eight established existing branch behaviour). Added completion
+coverage for standard England, non-English custom role, childminder, English
+authority/no-role, non-English no-role and custom setting/role paths. Added stale
+role clearing, no-role POST guards and setting-change/incomplete replacement
+coverage. Controller journeys use in-memory stores and do not simulate HTTP model
+binding; actual-Razor cases cover both role groups. Full Release suite:
+**316 passed**. Editor diagnostics and whitespace checks passed.
+
+**Manual evidence:** restarted app/database health was healthy. The live
+registration authority form preselected York. Authenticated HTTP submissions
+rejected an unknown authority and a custom role for the childminder account,
+and missing anti-forgery returned 400. Saved account details were unchanged.
+No overflow at 375px. General/custom-role completion is automated evidence,
+not a claimed live registration or successful click journey. No answers, progress,
+new starts or account changes were saved.
+
+Updated README/A04/A05. Full browser/PostgreSQL registration, displayed answer
+summaries, review/resume sequencing and human UX acceptance remain outstanding.
+All continuation changes remain uncommitted; nothing pushed.
+
+#### Registration answer summary and rejected-completion rendering
+
+**User objective:** continue. Read Rails check-your-answers/base controllers and
+request cases. Rails review mode returns to the summary after collecting newly
+required answers. Kept that routing change separate from this bounded presentation
+slice rather than adding session state or claiming full review parity.
+
+Check your answers now uses the setting title/custom description and friendly
+experience label, with the existing saved-value fallback for legacy reference IDs.
+Preferences display Yes/No, while unanswered fields explicitly say Not answered.
+Authority appears only when required in England; role and experience are omitted
+for no-role settings. Each visible answer has an explicit, distinctly labelled
+registration Change link, including the previously missing authority and research
+links. Both preference links retain the existing combined preferences form.
+Custom descriptions remain encoded. Shared controller summary population runs on
+GET and rejected completion so the setting/experience labels do not disappear
+when validation fails. Completion rules and forward step routing are unchanged.
+
+**Red before green:** nine of ten initial controller/actual-Razor cases failed
+before implementation; the missing-account guard already passed. Added actual
+error-summary rendering with a missing authority and retained display labels.
+Coverage includes conditional rows/edit links, encoding, null and false preference
+distinction, missing answers and legacy-ID fallback. Full Release suite:
+**327 passed**. Editor diagnostics and whitespace checks passed.
+
+**Manual evidence:** restarted app/database health was healthy. Live summary showed
+the current setting title, York, Childminder, 10 years or more and Yes preferences.
+All nine displayed edit destinations returned HTTP 200; their labels were unique.
+The form retained its registration completion destination and anti-forgery input.
+No horizontal overflow at 375px. These were read-only browser/HTTP checks, not a
+claimed click/save journey or a new registration. No account data, training
+answers, progress or learning starts were changed. Conditional/missing-answer
+summaries and rejected completion are automated evidence, not live data mutations.
+
+Updated README/A04/A05. Return-to-summary review/resume sequencing, full
+browser/PostgreSQL registration and human UX/accessibility acceptance remain
+outstanding. All continuation changes remain uncommitted; nothing pushed.
+
+**Checkpoint:** the user requested a checkpoint of the role/experience, setting,
+conditional registration and answer-summary slices.
+Commit message: Add account setting edits and improve registration journeys.
+This log is included in that commit; Git history supplies its resulting hash.
+Latest full Release result: **327 passed**; checkpoint whitespace checks passed.
+Nothing pushed. Next: return-to-summary review/resume sequencing, including newly
+required answers after country or setting changes. Human UX/accessibility review
+and full browser/PostgreSQL acceptance remain outstanding.
+
 ## Future entry format
 
 At subsequent checkpoints, append:
