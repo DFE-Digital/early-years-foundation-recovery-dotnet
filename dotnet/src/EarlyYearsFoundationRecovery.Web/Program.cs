@@ -31,6 +31,7 @@ builder.Services.AddScoped<IUserAccountStore, UserAccountStore>();
 builder.Services.AddScoped<ITrainingProgressStore, TrainingProgressStore>();
 builder.Services.AddScoped<ILearningNoteStore, LearningNoteStore>();
 builder.Services.AddScoped<AccountService>();
+builder.Services.AddScoped<AccountCookieEvents>();
 builder.Services.AddScoped<TrainingJourneyService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHealthChecks().AddCheck<ApplicationDatabaseHealthCheck>("database");
@@ -98,6 +99,7 @@ builder.Services
         options.ExpireTimeSpan = TimeSpan.FromHours(1);
         options.LoginPath = "/account/sign-in";
         options.AccessDeniedPath = "/account/access-denied";
+        options.EventsType = typeof(AccountCookieEvents);
     });
 
 if (hasGovOneConfiguration)

@@ -138,7 +138,7 @@ EYFR_TEST_POSTGRES='Host=localhost;Database=postgres;Username=your_local_role' \
   dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --configuration Release
 ```
 
-Without this variable the eight PostgreSQL cases are explicitly reported as
+Without this variable the sixteen PostgreSQL cases are explicitly reported as
 skipped; other tests run normally. CI configures a PostgreSQL 17 service and
 enables these tests. They cover upgrading existing notes, fresh-context
 reads/edits, learner isolation, confidence answers/lifecycle, account-closure
@@ -156,9 +156,44 @@ formative answer with refresh-safe explanation, fail an assessment,
 sign out/in and resume, pass a retry, complete the module and download a real
 Chromium PDF. It also checks account-name editing and account closure/redaction,
 note deletion and sign-out. It requires the Chromium installation described above.
-Neither live Contentful nor the shared development database is used.
+At each stage it also checks the rendered module-overview action and course-list
+state, following Continue/Retake/View certificate links rather than only testing
+known endpoint URLs. Interrupted notes and assessment answers restore through
+those links, including after sign-out/in.
+Neither live Contentful nor the shared development database is used. A second
+HTTP case follows the rendered optional pre-confidence skip link into learning,
+then returns to answer the questions. It verifies skipping creates no answers,
+assessment or completion, and preserves the original skip/start timestamps.
+Three registration HTTP cases cover custom-setting/custom-role validation and
+encoded summaries, draft restoration after sign-out/in, explicit preferences,
+review changes to non-England/no-role settings with stale-answer clearing,
+inapplicable-step GET/POST handling, and collecting a newly required English
+local authority without requiring role or experience. All use real cookies,
+forms and isolated PostgreSQL databases with fresh-context assertions.
+Two account-edit HTTP cases verify setting preview/cancellation without saving,
+all-or-nothing validation of dependent answers, changing to a no-role setting,
+location/authority validation, custom-role editing and independent email/research
+preferences. Fresh contexts verify unchanged answers after rejected forms and
+saved values after successful changes.
+A closure HTTP case checks reason validation, repeated confirmation after
+sign-out, a second already-authenticated session and subsequent Development
+sign-in. Old notes are deleted; retained assessment/progress records stay linked
+to the closed account, not the fresh unregistered account. Cookie sessions are
+bound to the specific learner record and validated against an active account on
+each authenticated request. Missing/closed/mismatched accounts clear the local
+cookie; protected pages challenge for sign-in instead of returning 404. Dormant
+cookies cannot attach to a new account created with the same login identity.
+Existing cookies without the learner-record claim require a fresh sign-in after
+this update. Database errors propagate rather than being treated as invalid
+sessions. Real One Login recovery/logout still needs acceptance.
 These tests do not simulate database/app restarts, concurrent writes, real
 One Login or a browser-driven accessibility journey.
+
+The full HTTP journey follows the explicit "Continue without submitting feedback"
+link after a pass, skips consecutive deferred feedback pages and reaches
+completion/certificate without pretending feedback was submitted. A separate
+negative case rejects feedback-answer POSTs and verifies that direct feedback
+visits cannot bypass the passing-assessment requirement or create responses.
 
 ### Local Contentful settings
 

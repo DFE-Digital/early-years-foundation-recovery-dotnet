@@ -1011,6 +1011,178 @@ This commits the isolated database/CI setup and learner acceptance evidence in
 slices 17-20. Nothing pushed. Continuing with optional confidence-skip navigation
 as a separate, uncommitted slice.
 
+### Checkpoint 21 (in progress): optional confidence-skip HTTP journey
+
+User requested "checkpoint continue". Committed slices 17-20 as `5b78d2c7`
+(`Add PostgreSQL and full learner HTTP acceptance tests`); nothing pushed.
+Then added a separate learner HTTP case reusing the existing application factory
+and isolated-database lifecycle. The fixture now includes a confidence
+introduction before the questions.
+
+The test extracts and follows the actual rendered "Skip questions" link, proves
+the introduction has not started learning, then reaches learning with a skip
+timestamp but no confidence start/completion, answers or assessment. Certificate
+access remains denied. Revisiting the introduction/learning and later answering
+both confidence questions preserves the original skip and learning-start
+timestamps, retains selections and does not complete the module.
+
+Both targeted HTTP journeys passed, followed by the full Release suite with
+PostgreSQL enabled: **391 passed, none skipped**. Editor diagnostics passed.
+Updated T08/Q03 and testing instructions. No production behaviour/schema changes
+or shared development learner updates. This slice remains uncommitted.
+
+### Checkpoint 22 (in progress): conditional registration HTTP acceptance
+
+**User objective:** continue learner-journey acceptance. Added three HTTP cases
+using the existing real-MVC/cookie/anti-forgery/PostgreSQL fixture:
+
+- Custom setting and role descriptions reject blank inputs without persistence.
+  Valid draft descriptions survive sign-out/in, role whitespace is trimmed and
+  summaries encode custom markup. Incomplete registration cannot access training
+  or complete; omitted research preference saves neither preference. Explicit
+  false/false answers and remaining experience allow registration to complete.
+- Reviewing an England/custom-role draft into Scotland/training-provider clears
+  stale authority, custom descriptions and experience. Summary omits irrelevant
+  rows; direct GETs and POSTs to skipped steps cannot restore those answers.
+- Starting in Scotland with an authority/no-role setting skips authority/role.
+  Reviewing country to England requires authority before completion, without
+  inventing a requirement for role or experience.
+
+The first two targeted cases passed. The third initially expected review-mode
+navigation to survive visiting the summary to test rejected completion. The
+existing summary intentionally ends review mode; corrected the test to follow
+normal role-skip/preferences navigation afterward rather than changing app
+behaviour. All three targeted cases then passed. Full Release with PostgreSQL
+enabled: **394 passed, none skipped**. Updated README/A05/A06/Q03 evidence.
+No production code/schema changes or shared development learner updates.
+Browser UX approval, all setting/role combinations and process/database restart
+are not claimed. Changes remain uncommitted; nothing pushed.
+
+### Checkpoint 23 (in progress): account-edit HTTP acceptance
+
+**User objective:** continue learner-journey acceptance. Added two account-edit
+cases using real MVC forms, cookie authentication, anti-forgery and isolated
+PostgreSQL storage. Setting preview and cancellation leave saved fields intact;
+an invalid childminder-role submission leaves all existing setting/authority/
+role/experience answers unchanged. A valid save changes them together, then a
+no-role setting clears stale answers and direct role edits cannot restore them.
+
+The second case rejects a missing custom-role description, saves a trimmed and
+encoded custom description, clears authority on moving to Scotland, rejects a
+return to England without authority, then saves a valid return. Missing email
+preference does not save. Updating email/research separately preserves the other
+preference even when unrelated values are posted. Fresh contexts verify saved
+and unchanged values, preserved registration and no invented training progress.
+
+Both targeted cases passed; the full Release suite with PostgreSQL enabled
+passed **396 tests, none skipped**. Editor diagnostics passed.
+No production code/schema changes or shared learner
+updates. Browser/accessibility approval and exhaustive edit combinations are not
+claimed. This and slices 21-22 remain uncommitted; nothing pushed.
+
+### Checkpoint 24 (in progress): closure, other sessions and subsequent sign-in
+
+**User objective:** continue learner-journey acceptance. Added an HTTP case
+starting with a registered learner, note and earned completion. Invalid closure
+reasons cannot save; confirmation without a reason returns to reason selection.
+After valid closure, account/log/certificate requests redirect the signed-out
+client to sign-in. A second previously authenticated client receives 404 for
+those resources because the old subject no longer resolves. Repeated anonymous
+confirmation cannot change closure.
+
+Subsequent Development sign-in creates a new unregistered learner with no
+restored name, notes, progress or assessments; training/certificate/log routes
+require registration again. Fresh contexts verify the original closure timestamp
+and redacted subject remain unchanged, notes remain deleted and retained
+completed progress/assessment stay attached only to the closed learner ID.
+This tests existing behaviour; it does not prescribe a production identity
+continuity policy or prove provider-side logout. Stale-session 404 recovery UX
+remains an explicit gap.
+
+Targeted case passed and full Release with PostgreSQL enabled passed
+**397 tests, none skipped**. Editor diagnostics passed. Updated README/A08.
+No production code/schema changes or shared development learner updates.
+This and slices 21-23 remain uncommitted; nothing pushed.
+
+### Checkpoint 25 (in progress): stale-session recovery
+
+**User objective:** continue learner-journey work. Fixed the stale-session 404
+identified in slice 24 using scoped cookie events shared by Development and OIDC
+cookie sign-in. Signing in stamps the server-resolved learner ID; validation
+requires that ID and subject to resolve to the same active learner. Invalid
+sessions are logged without identity data, rejected and signed out locally;
+normal authentication challenge handles protected-page recovery. Database errors
+are not swallowed or mistaken for missing accounts.
+
+The learner ID is necessary because closure renames the old subject and later
+sign-in may create another account under the original subject. Checking only
+subject would allow a dormant old cookie to attach to that new account. Extended
+the closure HTTP test to verify cookie deletion, sign-in redirects and rejection
+of a third dormant client after a fresh account has been created. Active session
+and complete learner journey coverage still passes.
+
+Intentional compatibility change: existing cookies without the new claim require
+a fresh sign-in. This performs an account read per authenticated cookie request.
+No database migration or identity-provider logout behaviour changes.
+Targeted closure/full-journey cases passed; full Release suite with PostgreSQL
+enabled: **397 passed, none skipped**. Editor diagnostics passed.
+README/A08 updated; real One Login and browser recovery acceptance remain.
+Changes remain uncommitted; nothing pushed.
+
+### Checkpoint 26 (in progress): module actions and resume navigation
+
+**User objective:** continue learner-journey acceptance. Extended the full HTTP
+journey to extract actual primary action links from the module overview, assert
+their labels/destinations and follow them. Checks cover initial Start module,
+Continue to saved page notes, Continue to the interrupted assessment after
+sign-out/in, Retake after failure, Continue to results after a pass and View
+certificate after completion. Verifies course-list available/in-progress,
+retake/result actions and completed/all-completed states at matching stages.
+
+The fixture intentionally exercises the first-question retake fallback because
+it has no assessment introduction; focused existing tests cover introduction
+rules. No new claims about CMS-wide navigation or direct-URL authorization.
+Targeted journey and full Release suite passed: **397 tests, none skipped**
+with PostgreSQL enabled. Count unchanged because this extends an existing case.
+Editor diagnostics passed. Updated README/T03. No production changes, no shared
+learner writes; changes remain uncommitted and nothing pushed.
+
+### Checkpoint 27 (in progress): deferred feedback continuation HTTP acceptance
+
+**User objective:** continue core learner acceptance. Extended the deterministic
+module with consecutive deferred feedback pages between results and thank-you.
+The full learner HTTP case now follows results to feedback, checks explicit
+unavailable/no-submission messaging and hidden CMS question content, extracts the
+rendered continuation link and follows it to thank-you and the actual PDF.
+Fresh reads before continuation prove feedback viewing has not completed the
+module or saved a feedback answer; certificate access remains blocked until
+the existing thank-you completion step.
+
+Added a negative HTTP case for direct feedback access without an assessment pass.
+It checks the continuation skips consecutive feedback pages, no question controls
+or answer endpoint are rendered, a forged feedback submission is rejected,
+completion returns a pass-required notice, and PDF access remains blocked.
+Fresh context checks show only the visited feedback page, not skipped pages or
+thank-you, and no fabricated start/completion/responses/assessments/notes.
+
+Both targeted cases passed; full Release suite with PostgreSQL enabled:
+**398 passed, none skipped**. Editor diagnostics passed. Updated README/T10.
+No production changes, no actual feedback feature introduced, no shared learner
+updates. Terminal feedback fallback retains focused existing coverage; human UX
+and browser interaction acceptance remain outstanding. Changes remain
+uncommitted; nothing pushed.
+
+#### Checkpoint commit for slices 21-27
+
+User requested "checkpoint". Re-ran the full Release suite with PostgreSQL
+enabled: **398 passed, none skipped**; whitespace checks passed.
+Checkpoint commit: `Strengthen learner journey acceptance and stale-session recovery`.
+Includes optional confidence skip, conditional registration, account edits,
+closure and subsequent sign-in, learner-record-bound cookies, rendered resume
+actions and explicit deferred-feedback continuation evidence.
+Existing cookies without the learner ID claim require fresh sign-in.
+No database migration. Nothing pushed; local app remains running.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

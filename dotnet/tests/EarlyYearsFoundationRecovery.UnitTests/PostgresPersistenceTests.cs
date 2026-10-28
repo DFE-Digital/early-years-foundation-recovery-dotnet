@@ -441,6 +441,7 @@ public sealed partial class PostgresPersistenceTests : IAsyncLifetime
 
     private static readonly TrainingModule Module = new("integration-module", "Integration module", 1, false,
     [
+        new("pre-intro", "Confidence check", "text_page", "Reflect on your confidence before learning."),
         new("pre-one", "Pre one", "pre_confidence", "", [new("1", "Confident"), new("2", "Not confident")]),
         new("pre-two", "Pre two", "pre_confidence", "", [new("1", "Confident"), new("2", "Not confident")]),
         new("learning", "Learning", "sub_module_intro", ""),
@@ -457,6 +458,8 @@ public sealed partial class PostgresPersistenceTests : IAsyncLifetime
         new("test-two", "Second test question", "summative", "",
             [new("yes", "Correct"), new("no", "Incorrect")], ["yes"]),
         new("results", "Test result", "assessment_results", ""),
+        new("feedback-one", "Your feedback", "feedback", "CMS feedback question must not appear."),
+        new("feedback-two", "More feedback", "feedback", "Another deferred feedback question."),
         new("thank-you", "Module complete", "thankyou", ""),
         new("certificate", "Certificate", "certificate", "")
     ]);

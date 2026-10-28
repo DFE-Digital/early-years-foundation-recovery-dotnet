@@ -24,28 +24,7 @@ public sealed partial class PostgresPersistenceTests
         {
             await db.Database.MigrateAsync();
         }
-        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-        {
-            builder.UseEnvironment("Development");
-            builder.ConfigureAppConfiguration((_, configuration) =>
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["ConnectionStrings:Application"] = _testConnection,
-                    ["Contentful:Space"] = "",
-                    ["Contentful:DeliveryToken"] = "",
-                    ["Contentful:PreviewToken"] = "",
-                    ["Authentication:GovOne:Authority"] = ""
-                }));
-            builder.ConfigureTestServices(services =>
-            {
-                services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
-                services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(_testConnection));
-                services.RemoveAll<ITrainingContentProvider>();
-                services.AddSingleton<ITrainingContentProvider, TestContentProvider>();
-                services.RemoveAll<IRegistrationOptionsProvider>();
-                services.AddSingleton<IRegistrationOptionsProvider, SampleRegistrationOptionsProvider>();
-            });
-        });
+        using var factory = CreateHttpFactory();
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             BaseAddress = new Uri("https://localhost"),
@@ -88,6 +67,9 @@ public sealed partial class PostgresPersistenceTests
             Assert.True(account.ResearchParticipant);
         }
 
+        Assert.Equal(module + "/content/pre-intro",
+            await GetModuleActionAsync(client, module, "Start module"));
+        Assert.Contains("Available modules", await client.GetStringAsync("/training"));
         AssertHttpRedirect(await client.GetAsync(module + "/certificate.pdf"), module);
         AssertHttpRedirect(await client.GetAsync(module + "/content/thank-you"), module);
         AssertHttpRedirect(await SubmitFormAsync(client, module + "/content/pre-one", module + "/questions/pre-one",
@@ -118,6 +100,10 @@ public sealed partial class PostgresPersistenceTests
         AssertHttpRedirect(await SubmitFormAsync(client, module + "/content/first", module + "/content/first/notes",
             ("Note.Content", "My HTTP reflection")), module + "/content/second");
         Assert.Contains("My HTTP reflection", await client.GetStringAsync("/my-account/learning-log"));
+        var resumeLearning = await GetModuleActionAsync(client, module, "Continue module");
+        Assert.Equal(module + "/content/first", resumeLearning);
+        Assert.Contains("My HTTP reflection", await client.GetStringAsync(resumeLearning));
+        Assert.Contains("Modules in progress", await client.GetStringAsync("/training"));
 
         AssertHttpRedirect(await SubmitFormAsync(client, module + "/content/post-one", module + "/questions/post-one",
             ("SelectedAnswerIds", "2")), module + "/content/practice");
@@ -189,7 +175,9 @@ public sealed partial class PostgresPersistenceTests
         AssertHttpRedirect(await SubmitFormAsync(client, "/account", "/account/sign-out"), "/account/sign-in");
         Assert.Equal(HttpStatusCode.Redirect, (await client.GetAsync(module)).StatusCode);
         AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
-        var resumed = await client.GetStringAsync(module + "/content/test-one");
+        var resumeTest = await GetModuleActionAsync(client, module, "Continue module");
+        Assert.Equal(module + "/content/test-one", resumeTest);
+        var resumed = await client.GetStringAsync(resumeTest);
         AssertSelectedAnswer(resumed, "c");
         AssertHttpRedirect(await client.GetAsync(module + "/assessment-result"), module);
         AssertHttpRedirect(await SubmitFormAsync(client, module + "/content/test-two", module + "/questions/test-two",
@@ -197,6 +185,10 @@ public sealed partial class PostgresPersistenceTests
         var failed = await client.GetStringAsync(module + "/assessment-result");
         Assert.Contains("You did not pass", failed);
         Assert.Contains("Retake test", failed);
+        var retake = await GetModuleActionAsync(client, module, "Retake test");
+        Assert.Equal(module + "/content/test-one", retake);
+        Assert.Contains("Retake end of module test", await client.GetStringAsync("/training"));
+        Assert.Contains("End of module test", await client.GetStringAsync(retake));
         AssertHttpRedirect(await client.GetAsync(module + "/content/thank-you"), module);
         AssertHttpRedirect(await client.GetAsync(module + "/certificate.pdf"), module);
 
@@ -206,10 +198,36 @@ public sealed partial class PostgresPersistenceTests
             ("SelectedAnswerIds", "yes")), module + "/assessment-result");
         var passed = await client.GetStringAsync(module + "/assessment-result");
         Assert.Contains("You passed the assessment.", passed);
-        Assert.Contains(module + "/content/thank-you", passed);
+        Assert.Contains(module + "/content/feedback-one", passed);
         Assert.Contains("You passed the assessment.", await client.GetStringAsync(module + "/assessment-result"));
+        var resumePassed = await GetModuleActionAsync(client, module, "Continue module");
+        Assert.Equal(module + "/content/results", resumePassed);
+        AssertHttpRedirect(await client.GetAsync(resumePassed), module + "/assessment-result");
+        Assert.Contains("View previous test result", await client.GetStringAsync("/training"));
         AssertHttpRedirect(await client.GetAsync(module + "/certificate.pdf"), module);
-        await client.GetStringAsync(module + "/content/thank-you");
+        var deferredFeedback = await client.GetStringAsync(module + "/content/feedback-one");
+        Assert.Contains("Feedback collection is not available in this version of the service.", deferredFeedback);
+        Assert.Contains("No feedback has been submitted.", deferredFeedback);
+        Assert.DoesNotContain("CMS feedback question must not appear.", deferredFeedback);
+        var continuation = Regex.Match(deferredFeedback,
+            "<a[^>]*href=\"([^\"]+)\"[^>]*>Continue without submitting feedback</a>");
+        Assert.True(continuation.Success);
+        var completionPath = WebUtility.HtmlDecode(continuation.Groups[1].Value);
+        Assert.Equal(module + "/content/thank-you", completionPath);
+        await using (var db = CreateContext())
+        {
+            Assert.Null((await db.TrainingModuleProgress.SingleAsync()).CompletedAt);
+            Assert.Empty(await db.TrainingResponses.Where(response => response.ResponseType == "feedback").ToListAsync());
+        }
+        AssertHttpRedirect(await client.GetAsync(module + "/certificate.pdf"), module);
+        Assert.Contains("Your module is complete.", await client.GetStringAsync(completionPath));
+        var certificateAction = await GetModuleActionAsync(client, module, "View certificate");
+        Assert.Equal(module + "/content/certificate", certificateAction);
+        AssertHttpRedirect(await client.GetAsync(certificateAction), module + "/certificate");
+        var completedModules = await client.GetStringAsync("/training");
+        Assert.Contains("Completed modules", completedModules);
+        Assert.Contains("You have completed all available modules.", completedModules);
+        Assert.Contains(module + "/certificate", completedModules);
         Assert.Contains("Casey Journey", await client.GetStringAsync(module + "/certificate"));
         using var download = await client.GetAsync(module + "/certificate.pdf");
         Assert.Equal(HttpStatusCode.OK, download.StatusCode);
@@ -266,6 +284,103 @@ public sealed partial class PostgresPersistenceTests
             Assert.StartsWith("closed-", account.GovOneSubject);
             Assert.Empty(await db.LearningNotes.ToListAsync());
         }
+    }
+
+    [PostgresFact]
+    public async Task HttpSkippingConfidenceStartsLearningWithoutAnswersAndAllowsReturningLater()
+    {
+        await using (var db = CreateContext())
+        {
+            await db.Database.MigrateAsync();
+            db.UserAccounts.Add(RegisteredAccount("local-development-user"));
+            await db.SaveChangesAsync();
+        }
+        using var factory = CreateHttpFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false
+        });
+        const string module = "/training/integration-module";
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        var introduction = await client.GetStringAsync(module + "/content/pre-intro");
+        var skip = Regex.Match(introduction, "<a[^>]*href=\"([^\"]+)\"[^>]*>Skip questions</a>");
+        Assert.True(skip.Success);
+        Assert.Equal(module + "/content/learning", WebUtility.HtmlDecode(skip.Groups[1].Value));
+        await using (var db = CreateContext())
+        {
+            Assert.Null((await db.TrainingModuleProgress.SingleAsync()).StartedAt);
+            Assert.Empty(await db.ConfidenceCheckProgress.ToListAsync());
+        }
+        var learning = await client.GetStringAsync(WebUtility.HtmlDecode(skip.Groups[1].Value));
+        Assert.Contains("<h1>Learning</h1>", learning);
+        Assert.DoesNotContain("Skip questions", learning);
+        DateTimeOffset skippedAt;
+        DateTimeOffset learningStartedAt;
+        await using (var db = CreateContext())
+        {
+            var check = await db.ConfidenceCheckProgress.SingleAsync();
+            Assert.Equal("pre", check.CheckType);
+            skippedAt = Assert.IsType<DateTimeOffset>(check.SkippedAt);
+            Assert.Null(check.StartedAt);
+            Assert.Null(check.CompletedAt);
+            learningStartedAt = Assert.IsType<DateTimeOffset>((await db.TrainingModuleProgress.SingleAsync()).StartedAt);
+            Assert.Empty(await db.TrainingResponses.ToListAsync());
+            Assert.Empty(await db.AssessmentAttempts.ToListAsync());
+        }
+        AssertHttpRedirect(await client.GetAsync(module + "/certificate.pdf"), module);
+        await client.GetStringAsync(module + "/content/pre-intro");
+        await client.GetStringAsync(module + "/content/learning");
+        AssertHttpRedirect(await SubmitFormAsync(client, module + "/content/pre-one", module + "/questions/pre-one",
+            ("SelectedAnswerIds", "1")), module + "/content/pre-two");
+        AssertHttpRedirect(await SubmitFormAsync(client, module + "/content/pre-two", module + "/questions/pre-two",
+            ("SelectedAnswerIds", "2")), module + "/content/learning");
+        AssertSelectedAnswer(await client.GetStringAsync(module + "/content/pre-one"), "1");
+        await using (var db = CreateContext())
+        {
+            var check = await db.ConfidenceCheckProgress.SingleAsync();
+            Assert.Equal(skippedAt, check.SkippedAt);
+            Assert.NotNull(check.StartedAt);
+            Assert.NotNull(check.CompletedAt);
+            var progress = await db.TrainingModuleProgress.SingleAsync();
+            Assert.Equal(learningStartedAt, progress.StartedAt);
+            Assert.Null(progress.CompletedAt);
+            Assert.Equal(2, await db.TrainingResponses.CountAsync());
+            Assert.Empty(await db.AssessmentAttempts.ToListAsync());
+        }
+    }
+
+    private WebApplicationFactory<Program> CreateHttpFactory() =>
+        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Development");
+            builder.ConfigureAppConfiguration((_, configuration) =>
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Application"] = _testConnection,
+                    ["Contentful:Space"] = "",
+                    ["Contentful:DeliveryToken"] = "",
+                    ["Contentful:PreviewToken"] = "",
+                    ["Authentication:GovOne:Authority"] = ""
+                }));
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+                services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(_testConnection));
+                services.RemoveAll<ITrainingContentProvider>();
+                services.AddSingleton<ITrainingContentProvider, TestContentProvider>();
+                services.RemoveAll<IRegistrationOptionsProvider>();
+                services.AddSingleton<IRegistrationOptionsProvider, SampleRegistrationOptionsProvider>();
+            });
+        });
+
+    private static async Task<string> GetModuleActionAsync(HttpClient client, string module, string label)
+    {
+        var html = await client.GetStringAsync(module);
+        var action = Regex.Match(html,
+            $"<a(?=[^>]*class=\"button\")[^>]*href=\"([^\"]+)\"[^>]*>{Regex.Escape(label)}</a>");
+        Assert.True(action.Success, $"Expected module action '{label}'.");
+        return WebUtility.HtmlDecode(action.Groups[1].Value);
     }
 
     private static void AssertSelectedAnswer(string html, string answerId) =>
