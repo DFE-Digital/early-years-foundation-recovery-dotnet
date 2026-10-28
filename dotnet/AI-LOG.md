@@ -873,6 +873,144 @@ This log is included in that commit; Git history supplies its resulting hash.
 Latest full Release result: **382 passed**; migration/model and whitespace checks
 passed. The local app/database is healthy. Nothing pushed.
 
+### Checkpoint 17 (in progress): isolated PostgreSQL persistence evidence
+
+**User objective:** continue with acceptance testing rather than expanding core
+features. Added four integration cases using the real EF/Npgsql stores and
+application services. Each case creates a uniquely named database, applies
+migrations and drops that exact database on disposal. The administrative
+connection comes from `EYFR_TEST_POSTGRES`; absent configuration explicitly skips
+the cases. Configured connection failures fail rather than silently skip.
+
+Cases verify page and legacy notes across fresh contexts, repeat edits without
+duplicate rows, clearing, per-page/per-module/per-learner isolation, editable
+confidence answers and idempotent lifecycle timestamps, later start after skip,
+and deletion of only the closing learner's notes through AccountService. A
+separate initial-schema upgrade test inserts an old module note before applying
+the later migrations, then proves it survives alongside a new page note.
+
+The first targeted run passed three cases; the closure test correctly rejected
+the incomplete fixture because no closure reason had been chosen. Updated the
+fixture to use the real reason-selection step before closing; no production
+behaviour was changed. Full Release run with PostgreSQL enabled: **386 passed,
+none skipped**. Editor diagnostics and whitespace checks passed. A separate run
+without configuration explicitly skipped all four cases. Verified no
+`eyfr_integration_...` databases remained and the development health check was
+healthy.
+
+CI now declares PostgreSQL 17 and sets the integration connection. Remote CI
+success is not claimed. README documents permissions, isolation, invocation and
+explicit skip behaviour. These are fresh-context persistence tests, not app or
+database restart tests, simultaneous-write tests or a complete browser journey.
+No shared development learner data was used or changed.
+
+Updated N03/Q02 to Partial with the remaining restart, concurrency and failure
+acceptance explicit. Changes remain uncommitted; nothing pushed.
+
+### Checkpoint 18 (in progress): persisted assessments, retries and completion
+
+**User objective:** continue acceptance evidence for the core learner journeys.
+Extended the isolated PostgreSQL fixture with deterministic formative and
+summative questions, including a multi-select question. Added three cases using
+the real application service and EF stores, reopening contexts between steps:
+
+- An interrupted summative attempt retains its identity/start, saved answer and
+  resume position. Replacing the saved answer with multiple selections leaves
+  one answer for that question and one visited-page record. The final question
+  grades the same attempt, without automatically completing the module.
+- A 50% failed attempt remains unchanged while a distinct retry is started,
+  reopened and passed at 100%. Incomplete/failed attempts cannot complete the
+  module. Completion after passing survives a fresh context and repeat calls
+  preserve both completion and assessment timestamps. Later wrong submissions
+  cannot mutate the pass or create another attempt. Another learner's partial
+  attempt remains separate and unchanged.
+- Formative questions retain the first saved answer across contexts, even after
+  a different answer is submitted; another learner can independently answer
+  correctly. Exactly one response per learner is persisted in this scenario.
+
+The first build caught an xUnit analyzer rule for filtering before Assert.Single;
+used its predicate overload. All seven PostgreSQL tests then passed, followed by
+the complete Release suite: **389 passed, none skipped**. No production code,
+schema or completion timing was changed. Updated README and S02-S05/Q02 evidence.
+These tests establish fresh-context persistence, not process/database restarts,
+simultaneous writes or end-to-end HTTP/browser/certificate acceptance.
+The existing development learner was not used. Changes, including Checkpoint 17,
+remain uncommitted; nothing pushed.
+
+### Checkpoint 19 (in progress): PostgreSQL-backed core HTTP journey
+
+**User objective:** continue with deterministic registration-to-certificate
+acceptance. Added a partial test-class file sharing the existing unique-database
+lifecycle and deterministic module fixture, extended with results/thank-you/
+certificate pages. The fixture runs the real MVC application with fixed training
+and registration content; only those providers and the connection are replaced.
+No fake authentication, repositories or PDF renderer are used.
+
+The HTTP case exercises anonymous and registration guards; actual Development
+sign-in/cookie authentication; every England/independent-childminder registration
+step including authority, role, experience, explicit preferences and summary;
+page-note save/log; rejection of a missing anti-forgery token; an interrupted
+assessment with sign-out/sign-in and restored selection; failure/retry/pass and
+result refresh; certificate denial before completion; thank-you completion; and
+an actual Chromium PDF download with learner/module text, A4 dimensions,
+attachment and no-store checks. Fresh contexts verify persisted registration,
+attempt history, scores, completion and notes.
+
+Extended the same case through name editing (including updated certificate
+preview), closure reason/confirmation, returning to the cancellation destination
+without closing, final redaction/note deletion and sign-out. Fresh database reads
+verify closure and personal-data redaction. This does not claim that every
+personal-data field is redacted, or prove provider-side logout.
+
+Targeted HTTP case passed before and after the edit/closure extension.
+Full Release suite with PostgreSQL enabled: **390 passed, none skipped**.
+No production code, migrations or lifecycle decisions changed. Q03 moves from
+Missing to Partial and A08 from Unverified to Partial; README and acceptance
+evidence explain that this is in-process HTTP using Development sign-in, not
+browser interaction, live One Login, all registration branches, process restart
+or concurrency evidence. The shared local learner was not used.
+Changes, including Checkpoints 17-18, remain uncommitted; nothing pushed.
+
+### Checkpoint 20 (in progress): confidence and learning-check HTTP acceptance
+
+**User objective:** continue core learner behaviour acceptance, keeping
+infrastructure work distinct from learner journeys. Extended the existing
+registration-to-certificate HTTP case rather than adding backend features.
+
+The deterministic fixture now supplies valid choices for every confidence
+question and explicit formative guidance. The journey submits both pre-check
+questions, revisits/edits a saved selection, verifies editable inputs without
+correctness feedback, and checks confidence alone has neither started learning
+nor created an assessment/completion. It then starts learning, submits/revisits/
+edits the post-check and verifies latest saved selections plus independent
+pre/post completion records. Completing confidence checks cannot unlock the PDF.
+
+The formative portion submits no answer and checks visible validation, then
+submits an incorrect answer and follows POST/redirect/GET to restored disabled
+controls, correct-answer/explanation headings and guidance. A later submission
+of a different answer still shows the original choice/explanation; a fresh
+context verifies exactly one formative response with the original answer.
+Neither confidence nor formative activity creates a summative attempt or
+completes the module. The existing failure/retry/certificate/edit/closure
+journey then continues.
+
+Targeted HTTP case passed, then the full Release suite passed **390 tests,
+none skipped**, with PostgreSQL enabled. The count is unchanged because this
+extends the existing end-to-end case. Editor diagnostics passed. No production
+behaviour/schema changes or shared development learner updates. Updated T07,
+S02/Q03 and README; browser interaction, optional skip navigation in the combined
+journey, remaining registration branches and real One Login are still explicit
+gaps. Changes remain uncommitted; nothing pushed.
+
+#### Checkpoint commit for slices 17-20
+
+User requested "checkpoint continue". Re-ran the complete Release suite with
+PostgreSQL enabled: **390 passed, none skipped**; whitespace checks passed.
+Checkpoint commit: `Add PostgreSQL and full learner HTTP acceptance tests`.
+This commits the isolated database/CI setup and learner acceptance evidence in
+slices 17-20. Nothing pushed. Continuing with optional confidence-skip navigation
+as a separate, uncommitted slice.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

@@ -38,7 +38,7 @@ Pre- and post-module confidence questions use a Next button without marking opin
 
 Contentful text and topic-introduction pages with `notes: true` include an in-page learning-note editor. Save and continue creates or updates the current learner/module/page note and follows the next CMS page, or returns to the module when none follows. Empty submissions clear that page's text; notes are optional and limited to 20,000 characters. Validation redisplays submitted text without overwriting the saved note. Page titles and navigation come from CMS content, not posted fields. Other page types do not accept notes even if flagged.
 
-The `/my-account/learning-log` page groups notes under every published module the learner has started, including empty module sections. It includes note dates, current-page links and the earlier module-level notes. The navigation link appears only after registration and starting a published module. The page-note migration preserves earlier module notes under an empty page name; their `/my-account/learning-log/{moduleName}` editor remains available from the aggregate and now requires completed registration, like training pages. Apply the migration before running the updated app. Automated HTTP tests use in-memory stores; PostgreSQL durability, concurrent edits and save-failure acceptance remain outstanding.
+The `/my-account/learning-log` page groups notes under every published module the learner has started, including empty module sections. It includes note dates, current-page links and the earlier module-level notes. The navigation link appears only after registration and starting a published module. The page-note migration preserves earlier module notes under an empty page name; their `/my-account/learning-log/{moduleName}` editor remains available from the aggregate and now requires completed registration, like training pages. Apply the migration before running the updated app. Automated HTTP tests use in-memory stores; separate PostgreSQL tests verify migrations, fresh-context persistence, learner isolation and account-closure note deletion. Process/database restarts, concurrent edits and save-failure acceptance remain outstanding.
 
 Confidence questions display the Contentful `hint` as encoded plain text, and post-module confidence questions also display `description` through the sanitized Markdown/rich-text renderer, matching Rails. Radio options reference the displayed guidance for screen readers. Missing or whitespace-only guidance is omitted; factual questions do not display these confidence-only fields.
 
@@ -123,6 +123,42 @@ dotnet run --project dotnet/src/EarlyYearsFoundationRecovery.Web
 ```
 
 In Development, visit `/account/sign-in` and use the local test-user sign-in. Outside Development, configure Gov.UK One Login with `Authentication__GovOne__Authority`, `Authentication__GovOne__ClientId`, and `Authentication__GovOne__PrivateKeyPath`. Set `Contentful__Space` and either `Contentful__DeliveryToken` or (when `Contentful__Preview=true`) `Contentful__PreviewToken` to load real training and registration content.
+
+### PostgreSQL integration tests
+
+Set `EYFR_TEST_POSTGRES` to a PostgreSQL connection string for a test-server role
+with permission to create databases. Each test creates a uniquely named
+`eyfr_integration_...` database, applies real migrations and drops only that
+database during cleanup. The configured database is used solely as the
+administrative connection; tests never apply migrations to it. Do not use
+production credentials or servers.
+
+```sh
+EYFR_TEST_POSTGRES='Host=localhost;Database=postgres;Username=your_local_role' \
+  dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --configuration Release
+```
+
+Without this variable the eight PostgreSQL cases are explicitly reported as
+skipped; other tests run normally. CI configures a PostgreSQL 17 service and
+enables these tests. They cover upgrading existing notes, fresh-context
+reads/edits, learner isolation, confidence answers/lifecycle, account-closure
+note deletion, formative locking, interrupted summative attempts with multi-select
+answer replacement, failed retries, passed-attempt locking and idempotent module
+completion. Passing alone does not complete the module, and incomplete or failed
+attempts cannot complete it.
+
+The HTTP integration case runs the real MVC app against its isolated database,
+with fixed training content and registration options. It uses Development
+sign-in, real authentication cookies, anti-forgery tokens and Razor forms to
+complete England/childminder registration, revisit/edit pre/post confidence
+answers without correctness feedback, save a page note, validate and lock a
+formative answer with refresh-safe explanation, fail an assessment,
+sign out/in and resume, pass a retry, complete the module and download a real
+Chromium PDF. It also checks account-name editing and account closure/redaction,
+note deletion and sign-out. It requires the Chromium installation described above.
+Neither live Contentful nor the shared development database is used.
+These tests do not simulate database/app restarts, concurrent writes, real
+One Login or a browser-driven accessibility journey.
 
 ### Local Contentful settings
 

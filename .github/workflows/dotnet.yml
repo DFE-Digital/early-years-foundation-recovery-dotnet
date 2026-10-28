@@ -16,6 +16,22 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: eyfr_test
+          POSTGRES_PASSWORD: integration-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eyfr_test -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      EYFR_TEST_POSTGRES: Host=localhost;Database=postgres;Username=eyfr_test;Password=integration-only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
