@@ -122,6 +122,11 @@ public sealed class TrainingController(
         }
 
         await training.RecordPageViewAsync(account, moduleName, pageName, cancellationToken);
+        if (page.PageType is "confidence" or "pre_confidence")
+        {
+            await training.RecordConfidenceCheckQuestionViewAsync(
+                account, moduleName, pageName, cancellationToken);
+        }
 
         var index = module.Pages.ToList().IndexOf(page);
         var nextPage = index >= 0 && index + 1 < module.Pages.Count
@@ -133,8 +138,50 @@ public sealed class TrainingController(
             : latestAssessment?.Answers.SingleOrDefault(answer => answer.QuestionName == pageName)?.SelectedAnswerIds.ToArray() ?? [];
         return View("Page", new TrainingPageViewModel(module, page, nextPage, latestAssessment)
         {
-            SelectedAnswerIds = selectedAnswers
+            SelectedAnswerIds = selectedAnswers,
+            Note = new LearningNoteModel
+            {
+                Content = page.SupportsNotes
+                    ? (await training.GetPageNoteAsync(account, moduleName, pageName, cancellationToken))?.Content ?? ""
+                    : ""
+            }
         });
+    }
+
+    [HttpPost("{moduleName}/content/{pageName}/notes")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveNote(
+        string moduleName,
+        string pageName,
+        [Bind(Prefix = "Note")] LearningNoteModel note,
+        CancellationToken cancellationToken)
+    {
+        var account = await CurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+        var module = await training.GetModuleAsync(moduleName, cancellationToken);
+        var page = module?.Pages.SingleOrDefault(item => item.Name == pageName);
+        if (module is null || module.IsDraft || page?.SupportsNotes != true)
+        {
+            return NotFound();
+        }
+        var index = module.Pages.ToList().IndexOf(page);
+        var nextPage = module.Pages.Skip(index + 1).FirstOrDefault();
+        if (!ModelState.IsValid)
+        {
+            return View("Page", new TrainingPageViewModel(module, page, nextPage, null) { Note = note });
+        }
+
+        await training.SavePageNoteAsync(account, moduleName, pageName, note.Content, cancellationToken);
+        return nextPage is null
+            ? RedirectToAction(nameof(Module), new { moduleName })
+            : RedirectToAction(nameof(Page), new { moduleName, pageName = nextPage.Name });
     }
 
     [HttpGet("{moduleName}/certificate")]

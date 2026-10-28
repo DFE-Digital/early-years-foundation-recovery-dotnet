@@ -36,6 +36,27 @@ public sealed class TrainingJourneyService(
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<LearningLogModule>> GetLearningLogAsync(
+        UserAccount account,
+        CancellationToken cancellationToken)
+    {
+        var activeModules = (await GetModulesAsync(account, cancellationToken))
+            .Where(item => !item.Module.IsDraft && item.State is "in-progress" or "completed")
+            .ToArray();
+        var userNotes = await notes.GetForUserAsync(account.Id, cancellationToken);
+        return activeModules
+            .Select(item => new LearningLogModule(
+                item.Module,
+                userNotes.Where(note => note.ModuleName == item.Module.Name).ToArray()))
+            .ToArray();
+    }
+
+    public async Task<bool> HasStartedPublishedModuleAsync(
+        UserAccount account, CancellationToken cancellationToken) =>
+        account.IsRegistrationComplete &&
+        (await GetModulesAsync(account, cancellationToken))
+            .Any(item => !item.Module.IsDraft && item.State is "in-progress" or "completed");
+
     public async Task<TrainingModule?> GetModuleAsync(string moduleName, CancellationToken cancellationToken) =>
         await content.GetModuleAsync(moduleName, cancellationToken);
 
@@ -53,12 +74,13 @@ public sealed class TrainingJourneyService(
     {
         var module = await content.GetModuleAsync(moduleName, cancellationToken);
         var page = module?.Pages.SingleOrDefault(page => page.Name == pageName);
-        if (page is null)
+        if (module is null || page is null)
         {
             throw new InvalidOperationException("The requested training content does not exist.");
         }
 
         var userProgress = await progress.FindAsync(account.Id, moduleName, cancellationToken);
+        var isFirstModuleStart = userProgress?.StartedAt is null;
         if (userProgress is null)
         {
             userProgress = new TrainingModuleProgress(account.Id, moduleName);
@@ -68,9 +90,65 @@ public sealed class TrainingJourneyService(
         var now = timeProvider.GetUtcNow();
         if (page.PageType == "sub_module_intro")
         {
+            if (isFirstModuleStart && module.Pages.Any(item => item.PageType == "pre_confidence"))
+            {
+                var confidenceCheck = await progress.FindConfidenceCheckAsync(
+                    account.Id, moduleName, "pre", cancellationToken);
+                if (confidenceCheck is null)
+                {
+                    confidenceCheck = new ConfidenceCheckProgress(account.Id, moduleName, "pre");
+                    await progress.AddConfidenceCheckAsync(confidenceCheck, cancellationToken);
+                }
+                confidenceCheck.RecordSkip(now);
+            }
             userProgress.RecordStart(now);
         }
         userProgress.RecordPageView(pageName, now);
+        await progress.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RecordConfidenceCheckQuestionViewAsync(
+        UserAccount account,
+        string moduleName,
+        string questionName,
+        CancellationToken cancellationToken)
+    {
+        var module = await content.GetModuleAsync(moduleName, cancellationToken);
+        var question = module?.Pages.SingleOrDefault(page => page.Name == questionName);
+        if (module is null || module.IsDraft || question is null ||
+            question.PageType is not ("pre_confidence" or "confidence"))
+        {
+            throw new InvalidOperationException("The requested confidence-check question does not exist.");
+        }
+
+        var checkType = question.PageType == "pre_confidence" ? "pre" : "post";
+        var checkQuestions = module.Pages.Where(page => page.PageType == question.PageType).ToArray();
+        var index = Array.FindIndex(checkQuestions, page => page.Name == questionName);
+        var check = await progress.FindConfidenceCheckAsync(account.Id, moduleName, checkType, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        var shouldStart = index == 0 && check?.StartedAt is null;
+        var shouldComplete = !shouldStart &&
+                             index == checkQuestions.Length - 1 &&
+                             check?.CompletedAt is null;
+        if (!shouldStart && !shouldComplete)
+        {
+            return;
+        }
+
+        if (check is null)
+        {
+            check = new ConfidenceCheckProgress(account.Id, moduleName, checkType);
+            await progress.AddConfidenceCheckAsync(check, cancellationToken);
+        }
+        if (shouldComplete)
+        {
+            check.RecordCompletion(now);
+        }
+        else
+        {
+            check.RecordStart(now);
+        }
+
         await progress.SaveChangesAsync(cancellationToken);
     }
 
@@ -219,6 +297,36 @@ public sealed class TrainingJourneyService(
         CancellationToken cancellationToken) =>
         await notes.FindAsync(account.Id, moduleName, cancellationToken);
 
+    public Task<LearningNote?> GetPageNoteAsync(
+        UserAccount account, string moduleName, string pageName, CancellationToken cancellationToken) =>
+        notes.FindPageAsync(account.Id, moduleName, pageName, cancellationToken);
+
+    public async Task SavePageNoteAsync(
+        UserAccount account, string moduleName, string pageName, string content, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        if (content.Length > 20_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(content), "Learning notes cannot exceed 20,000 characters.");
+        }
+
+        var module = await GetModuleAsync(moduleName, cancellationToken);
+        var page = module?.Pages.SingleOrDefault(item => item.Name == pageName);
+        if (!account.IsRegistrationComplete || module is null || module.IsDraft || page?.SupportsNotes != true)
+        {
+            throw new InvalidOperationException("Learning notes are not available for this page.");
+        }
+
+        var note = await notes.FindPageAsync(account.Id, moduleName, pageName, cancellationToken);
+        if (note is null)
+        {
+            note = new LearningNote(account.Id, moduleName, pageName, page.Title);
+            await notes.AddAsync(note, cancellationToken);
+        }
+        note.Update(content, timeProvider.GetUtcNow());
+        await notes.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task SaveNoteAsync(
         UserAccount account,
         string moduleName,
@@ -256,5 +364,7 @@ public sealed record ModuleListing(TrainingModule Module, string State, int Visi
     public DateTimeOffset? CompletedAt { get; init; }
     public IReadOnlyCollection<string> VisitedPageNames { get; init; } = [];
 }
+
+public sealed record LearningLogModule(TrainingModule Module, IReadOnlyList<LearningNote> Notes);
 
 public sealed record AssessmentResult(bool Correct, decimal? Score, bool? Passed, bool IsComplete);

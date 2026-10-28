@@ -26,6 +26,60 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task PageNotesFormAppearsOnlyForEnabledTextPage(bool enabled)
+    {
+        var page = new TrainingPage("reflection", "Reflect", "text_page", "Reflection prompt", Notes: enabled);
+        var next = new TrainingPage("next", "Next", "text_page", "");
+        var module = new TrainingModule("module-one", "Module one", 1, false, [page, next]);
+        var html = await RenderAsync(new TrainingPageViewModel(module, page, next, null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Equal(enabled, html.Contains("name=\"Note.Content\"", StringComparison.Ordinal));
+        if (enabled)
+        {
+            Assert.Contains("action=\"/training/module-one/content/reflection/notes\"", html);
+            Assert.Contains("Do not enter personal or sensitive information", html);
+            Assert.Contains("__RequestVerificationToken", html);
+            Assert.Contains("Save and continue", html);
+        }
+    }
+
+    [Fact]
+    public async Task LearningLogRendersEmptyAndFilledGroupsWithEncodedContentAndPageLinks()
+    {
+        var model = new LearningLogViewModel(
+        [
+            new("module-one", "Module <One>",
+            [
+                new("Reflection <title>", "reflection", "<script>unsafe</script>\nSecond line", DateTimeOffset.Parse("2026-10-28T08:00:00Z"), false),
+                new("Earlier module note", null, "", DateTimeOffset.Parse("2026-10-27T08:00:00Z"), true)
+            ]),
+            new("module-two", "Empty module", [])
+        ]);
+        var html = await RenderAsync(model, "/Views/LearningLog/Index.cshtml");
+
+        Assert.Contains("Notes for Module &lt;One&gt;", html);
+        Assert.Contains("href=\"/training/module-one/content/reflection\">Reflection &lt;title&gt;</a>", html);
+        Assert.Contains("&lt;script&gt;unsafe&lt;/script&gt;", html);
+        Assert.DoesNotContain("<script>unsafe</script>", html);
+        Assert.Contains("Earlier module note", html);
+        Assert.Matches("href=\"[^\"]*module-one[^\"]*\">Earlier module note</a>", html);
+        Assert.Contains("Second line", html);
+        Assert.Contains("You have not made any notes for this module.", html);
+        Assert.Contains("28 October 2026", html);
+    }
+
+    [Fact]
+    public async Task LearningLogExplainsWhenNoModuleHasStarted()
+    {
+        var html = await RenderAsync(new LearningLogViewModel([]), "/Views/LearningLog/Index.cshtml");
+
+        Assert.Contains("You have not started any modules yet.", html);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task DeferredFeedbackShowsExplicitBoundaryWithoutQuestionOrSubmission(bool hasContinuation)
     {
         var feedback = new TrainingPage("feedback-one", "Tell us what you think", "feedback",

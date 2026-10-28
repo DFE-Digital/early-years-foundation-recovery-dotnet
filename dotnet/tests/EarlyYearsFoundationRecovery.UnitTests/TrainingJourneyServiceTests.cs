@@ -12,11 +12,410 @@ using System.Security.Claims;
 using EarlyYearsFoundationRecovery.Web.Content;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.FileProviders;
+using System.Net;
+using System.Text.Encodings.Web;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class TrainingJourneyServiceTests
 {
+    [Fact]
+    public async Task PageNotesHttpFormValidatesSavesClearsAndRejectsMissingAntiforgeryToken()
+    {
+        var page = new TrainingPage("reflection", "Reflection", "text_page", "", Notes: true);
+        var module = new TrainingModule("module-one", "Module", 1, false,
+            [page, new TrainingPage("next", "Next", "text_page", "")]);
+        var (_, account) = AccountNameController();
+        var notes = new InMemoryNoteStore();
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IUserAccountStore>();
+                services.AddSingleton<IUserAccountStore>(new InMemoryAccountStore(account));
+                services.RemoveAll<ILearningNoteStore>();
+                services.AddSingleton<ILearningNoteStore>(notes);
+                services.RemoveAll<ITrainingProgressStore>();
+                services.AddSingleton<ITrainingProgressStore>(new InMemoryProgressStore());
+                services.RemoveAll<ITrainingContentProvider>();
+                services.AddSingleton<ITrainingContentProvider>(new InMemoryContentProvider(module));
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "NotesTest";
+                    options.DefaultChallengeScheme = "NotesTest";
+                }).AddScheme<AuthenticationSchemeOptions, NotesAuthenticationHandler>("NotesTest", _ => { });
+            }));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false
+        });
+        const string url = "/training/module-one/content/reflection";
+        var html = await client.GetStringAsync(url);
+        var match = Regex.Match(html, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
+        Assert.True(match.Success);
+        var token = WebUtility.HtmlDecode(match.Groups[1].Value);
+        async Task<HttpResponseMessage> Post(string text, bool includeToken = true)
+        {
+            var data = new Dictionary<string, string>
+            {
+                ["Note.Content"] = text,
+                ["Title"] = "Untrusted title",
+                ["next_page_name"] = "https://example.test/untrusted",
+                ["UserAccountId"] = "999"
+            };
+            if (includeToken)
+            {
+                data["__RequestVerificationToken"] = token;
+            }
+            return await client.PostAsync(url + "/notes", new FormUrlEncodedContent(data));
+        }
+
+        var saved = await Post("<script>alert('not executable')</script>\nReflection");
+        Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
+        Assert.Equal("/training/module-one/content/next", saved.Headers.Location?.OriginalString);
+        var note = await notes.FindPageAsync(account.Id, module.Name, page.Name, CancellationToken.None);
+        Assert.NotNull(note);
+        Assert.Equal(page.Title, note.Title);
+        html = await client.GetStringAsync(url);
+        Assert.Contains("&lt;script&gt;", html);
+        Assert.DoesNotContain("<script>alert(", html);
+
+        var invalid = await Post(new string('a', 20_001));
+        Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+        Assert.Contains("20000", await invalid.Content.ReadAsStringAsync());
+        Assert.Contains("Reflection", note.Content);
+        var noToken = await Post("Must not save", includeToken: false);
+        Assert.Equal(HttpStatusCode.BadRequest, noToken.StatusCode);
+        Assert.Contains("Reflection", note.Content);
+
+        var cleared = await Post("");
+        Assert.Equal(HttpStatusCode.Redirect, cleared.StatusCode);
+        Assert.Equal("", note.Content);
+        Assert.Same(note, await notes.FindPageAsync(account.Id, module.Name, page.Name, CancellationToken.None));
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.PostAsync("/training/module-one/content/next/notes",
+                new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["Note.Content"] = "Disabled page",
+                    ["__RequestVerificationToken"] = token
+                }))).StatusCode);
+    }
+
+    [Fact]
+    public async Task LearningLogNavigationAndPageAreAvailableOnlyAfterStartedModule()
+    {
+        var (_, account) = AccountNameController();
+        var module = new TrainingModule("first", "First module", 1, false,
+            [new TrainingPage("intro", "Introduction", "topic_intro", "")]);
+        var notes = new InMemoryNoteStore();
+        var progress = new InMemoryProgressStore();
+        var oldModuleNote = new LearningNote(account.Id, module.Name);
+        oldModuleNote.Update("Old text", DateTimeOffset.UtcNow);
+        await notes.AddAsync(oldModuleNote, CancellationToken.None);
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IUserAccountStore>();
+                services.AddSingleton<IUserAccountStore>(new InMemoryAccountStore(account));
+                services.RemoveAll<ILearningNoteStore>();
+                services.AddSingleton<ILearningNoteStore>(notes);
+                services.RemoveAll<ITrainingProgressStore>();
+                services.AddSingleton<ITrainingProgressStore>(progress);
+                services.RemoveAll<ITrainingContentProvider>();
+                services.AddSingleton<ITrainingContentProvider>(new InMemoryContentProvider(module));
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "NotesTest";
+                    options.DefaultChallengeScheme = "NotesTest";
+                }).AddScheme<AuthenticationSchemeOptions, NotesAuthenticationHandler>("NotesTest", _ => { });
+            }));
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false
+        });
+
+        var page = await client.GetStringAsync("/training");
+        Assert.DoesNotContain(">Learning log</a>", page);
+        progress.StartModule(account.Id, module.Name);
+        page = await client.GetStringAsync("/training");
+        Assert.Contains("href=\"/my-account/learning-log\">Learning log</a>", page);
+
+        var log = await client.GetStringAsync("/my-account/learning-log");
+        Assert.Contains("Notes for First module", log);
+        Assert.DoesNotContain("You have not made any notes for this module.", log);
+        Assert.Contains("Earlier module note", log);
+        Assert.Contains("Old text", log);
+
+        var editor = await client.GetStringAsync("/my-account/learning-log/first");
+        var tokenMatch = Regex.Match(editor, "name=\"__RequestVerificationToken\"[^>]*value=\"([^\"]+)\"");
+        Assert.True(tokenMatch.Success);
+        var updated = await client.PostAsync("/my-account/learning-log/first", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["Note.Content"] = "Updated old text",
+                ["__RequestVerificationToken"] = WebUtility.HtmlDecode(tokenMatch.Groups[1].Value)
+            }));
+        Assert.Equal(HttpStatusCode.Redirect, updated.StatusCode);
+        Assert.Equal("Updated old text",
+            (await notes.FindAsync(account.Id, module.Name, CancellationToken.None))!.Content);
+    }
+
+    [Fact]
+    public async Task PageNotesRemainSeparateFromOtherPagesModulesUsersAndLegacyNotes()
+    {
+        var first = new TrainingPage("first", "First reflection", "text_page", "", Notes: true);
+        var second = first with { Name = "second", Title = "Second reflection" };
+        var module = new TrainingModule("module-one", "Module", 1, false, [first, second]);
+        var notes = new InMemoryNoteStore();
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(new InMemoryContentProvider(module), progress, notes, TimeProvider.System);
+        var (_, account) = AccountNameController();
+        var otherUserNote = new LearningNote(account.Id + 1, module.Name, first.Name, first.Title);
+        otherUserNote.Update("Other person's note", DateTimeOffset.UtcNow);
+        await notes.AddAsync(otherUserNote, CancellationToken.None);
+        await service.SaveNoteAsync(account, module.Name, "Legacy module note", CancellationToken.None);
+
+        await service.SavePageNoteAsync(account, module.Name, first.Name, "First draft", CancellationToken.None);
+        var original = await service.GetPageNoteAsync(account, module.Name, first.Name, CancellationToken.None);
+        await service.SavePageNoteAsync(account, module.Name, second.Name, "Second page note", CancellationToken.None);
+        await service.SavePageNoteAsync(account, module.Name, first.Name, "Edited first note", CancellationToken.None);
+
+        var edited = await service.GetPageNoteAsync(account, module.Name, first.Name, CancellationToken.None);
+        Assert.Same(original, edited);
+        Assert.Equal("Edited first note", edited!.Content);
+        Assert.Equal(first.Title, edited.Title);
+        Assert.Equal("Second page note", (await service.GetPageNoteAsync(account, module.Name, second.Name, CancellationToken.None))!.Content);
+        Assert.Equal("Legacy module note", (await service.GetNoteAsync(account, module.Name, CancellationToken.None))!.Content);
+        Assert.Equal("Other person's note", otherUserNote.Content);
+        Assert.Null(await service.GetPageNoteAsync(account, "another-module", first.Name, CancellationToken.None));
+        Assert.Empty(await progress.GetForUserAsync(account.Id, CancellationToken.None));
+        Assert.Empty(await progress.GetAssessmentsAsync(account.Id, module.Name, CancellationToken.None));
+
+        await service.SavePageNoteAsync(account, module.Name, first.Name, "", CancellationToken.None);
+        Assert.Equal("", edited.Content);
+        Assert.Equal("Second page note", (await service.GetPageNoteAsync(account, module.Name, second.Name, CancellationToken.None))!.Content);
+    }
+
+    [Fact]
+    public async Task LearningLogGroupsStartedPublishedModulesIncludingEmptyGroupsAndOnlyOwnersNotes()
+    {
+        var firstModule = new TrainingModule("first", "First module", 2, false,
+        [
+            new TrainingPage("reflection", "Reflection page", "text_page", "", Notes: true)
+        ]);
+        var secondModule = new TrainingModule("second", "Second module", 1, false,
+        [
+            new TrainingPage("intro", "Introduction", "topic_intro", "")
+        ]);
+        var draft = new TrainingModule("draft", "Future module", 3, true, []);
+        var account = new UserAccount("subject-1", "person@example.test");
+        var notes = new InMemoryNoteStore();
+        var progress = new InMemoryProgressStore();
+        progress.StartModule(account.Id, "first");
+        progress.StartModule(account.Id, "second");
+        progress.StartModule(account.Id, "draft");
+        progress.StartModule(account.Id + 1, "other-learner");
+        var ownNote = new LearningNote(account.Id, "first", "reflection", "Reflection page");
+        ownNote.Update("My private reflection", DateTimeOffset.UtcNow);
+        await notes.AddAsync(ownNote, CancellationToken.None);
+        var otherNote = new LearningNote(account.Id + 1, "first", "reflection", "Reflection page");
+        otherNote.Update("Not mine", DateTimeOffset.UtcNow.AddMinutes(1));
+        await notes.AddAsync(otherNote, CancellationToken.None);
+        var moduleNote = new LearningNote(account.Id, "first");
+        moduleNote.Update("A preserved module note", DateTimeOffset.UtcNow.AddMinutes(2));
+        await notes.AddAsync(moduleNote, CancellationToken.None);
+
+        var service = new TrainingJourneyService(
+            new InMemoryTrainingContentProvider([firstModule, secondModule, draft]),
+            progress, notes, TimeProvider.System);
+
+        var groups = await service.GetLearningLogAsync(account, CancellationToken.None);
+
+        Assert.Equal(["second", "first"], groups.Select(group => group.Module.Name));
+        Assert.Empty(groups[0].Notes);
+        Assert.Equal(["A preserved module note", "My private reflection"],
+            groups[1].Notes.Select(note => note.Content));
+        Assert.Equal(["", "reflection"], groups[1].Notes.Select(note => note.PageName));
+        Assert.DoesNotContain(groups, group => group.Module.Name == "draft");
+    }
+
+    [Fact]
+    public async Task LearningLogNavigationAppearsOnlyAfterARegisteredLearnerStartsLiveTraining()
+    {
+        var module = new TrainingModule("first", "First module", 1, false,
+            [new TrainingPage("intro", "Introduction", "topic_intro", "")]);
+        var draft = new TrainingModule("draft", "Future module", 2, true, []);
+        var (_, account) = AccountNameController();
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(
+            new InMemoryTrainingContentProvider([module, draft]), progress,
+            new InMemoryNoteStore(), TimeProvider.System);
+
+        Assert.False(await service.HasStartedPublishedModuleAsync(account, CancellationToken.None));
+        progress.StartModule(account.Id, "draft");
+        Assert.False(await service.HasStartedPublishedModuleAsync(account, CancellationToken.None));
+        progress.StartModule(account.Id, "first");
+        Assert.True(await service.HasStartedPublishedModuleAsync(account, CancellationToken.None));
+        account.AcceptTerms(DateTimeOffset.UtcNow);
+        account.UpdateName("Alex", "Example");
+        account.UpdateLocation("Scotland", null);
+        account.UpdateSetting("other", "Example setting", false, "none");
+        account.UpdatePreferences(false, false);
+        Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+        Assert.True(await service.HasStartedPublishedModuleAsync(account, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true, false, true, "reflection", "module-one")]
+    [InlineData(false, true, true, "reflection", "module-one")]
+    [InlineData(false, false, false, "reflection", "module-one")]
+    [InlineData(false, false, true, "missing", "module-one")]
+    [InlineData(false, false, true, "reflection", "missing")]
+    public async Task PageNoteServiceRejectsUnavailableDestinations(
+        bool draft, bool disabled, bool registered, string pageName, string moduleName)
+    {
+        var module = new TrainingModule("module-one", "Module", 1, draft,
+            [new TrainingPage("reflection", "Reflection", "text_page", "", Notes: !disabled)]);
+        var notes = new InMemoryNoteStore();
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), new InMemoryProgressStore(), notes, TimeProvider.System);
+        var (_, account) = AccountNameController(registered);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SavePageNoteAsync(account, moduleName, pageName, "Not saved", CancellationToken.None));
+        Assert.Null(await notes.FindPageAsync(account.Id, moduleName, pageName, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PageNoteLengthBoundaryIsEnforcedWithoutOverwritingSavedContent()
+    {
+        var module = new TrainingModule("module-one", "Module", 1, false,
+            [new TrainingPage("reflection", "Reflection", "text_page", "", Notes: true)]);
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), new InMemoryProgressStore(), new InMemoryNoteStore(), TimeProvider.System);
+        var (_, account) = AccountNameController();
+        var maximum = new string('a', 20_000);
+        await service.SavePageNoteAsync(account, module.Name, "reflection", maximum, CancellationToken.None);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            service.SavePageNoteAsync(account, module.Name, "reflection", maximum + "a", CancellationToken.None));
+        Assert.Equal(maximum, (await service.GetPageNoteAsync(account, module.Name, "reflection", CancellationToken.None))!.Content);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SavingPageNoteUsesCmsNextDestinationAndRestoresText(bool hasNext)
+    {
+        var page = new TrainingPage("reflection", "Reflection", "text_page", "", Notes: true);
+        TrainingPage[] pages = hasNext ? [page, new("next", "Next", "text_page", "")] : [page];
+        var module = new TrainingModule("module-one", "Module", 1, false, pages);
+        var controller = TestController(module);
+
+        var redirect = Assert.IsType<RedirectToActionResult>(await controller.SaveNote(
+            module.Name, page.Name, new LearningNoteModel { Content = "My reflection" }, CancellationToken.None));
+        Assert.Equal(hasNext ? nameof(TrainingController.Page) : nameof(TrainingController.Module), redirect.ActionName);
+        Assert.Equal(module.Name, redirect.RouteValues!["moduleName"]);
+        if (hasNext)
+        {
+            Assert.Equal("next", redirect.RouteValues["pageName"]);
+        }
+        var view = Assert.IsType<ViewResult>(await controller.Page(module.Name, page.Name, CancellationToken.None));
+        Assert.Equal("My reflection", Assert.IsType<TrainingPageViewModel>(view.Model).Note.Content);
+    }
+
+    [Fact]
+    public async Task InvalidPageNoteRedisplaysSubmittedTextWithoutOverwritingSavedText()
+    {
+        var page = new TrainingPage("reflection", "Reflection", "text_page", "", Notes: true);
+        var module = new TrainingModule("module-one", "Module", 1, false, [page]);
+        var controller = TestController(module);
+        await controller.SaveNote(module.Name, page.Name, new LearningNoteModel { Content = "Saved" }, CancellationToken.None);
+        controller.ModelState.AddModelError("Note.Content", "Too long");
+        var invalid = new string('a', 20_001);
+
+        var result = Assert.IsType<ViewResult>(await controller.SaveNote(
+            module.Name, page.Name, new LearningNoteModel { Content = invalid }, CancellationToken.None));
+        Assert.Equal("Page", result.ViewName);
+        Assert.Equal(invalid, Assert.IsType<TrainingPageViewModel>(result.Model).Note.Content);
+        var saved = Assert.IsType<ViewResult>(await controller.Page(module.Name, page.Name, CancellationToken.None));
+        Assert.Equal("Saved", Assert.IsType<TrainingPageViewModel>(saved.Model).Note.Content);
+    }
+
+    [Fact]
+    public async Task PageNoteControllerRequiresCompletedRegistration()
+    {
+        var module = new TrainingModule("module-one", "Module", 1, false,
+            [new TrainingPage("reflection", "Reflection", "text_page", "", Notes: true)]);
+        var result = Assert.IsType<RedirectToActionResult>(await TestController(module, registered: false).SaveNote(
+            module.Name, "reflection", new LearningNoteModel(), CancellationToken.None));
+        Assert.Equal("Registration", result.ControllerName);
+        Assert.Equal("Terms", result.ActionName);
+    }
+
+    [Theory]
+    [InlineData(true, true, "reflection", "module-one")]
+    [InlineData(false, false, "reflection", "module-one")]
+    [InlineData(false, true, "missing", "module-one")]
+    [InlineData(false, true, "reflection", "missing")]
+    public async Task PageNoteControllerRejectsInvalidPageDestinations(
+        bool draft, bool enabled, string pageName, string moduleName)
+    {
+        var module = new TrainingModule("module-one", "Module", 1, draft,
+            [new TrainingPage("reflection", "Reflection", "text_page", "", Notes: enabled)]);
+        Assert.IsType<NotFoundResult>(await TestController(module).SaveNote(
+            moduleName, pageName, new LearningNoteModel { Content = "Not saved" }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task LegacyLearningLogEditorRequiresCompletedRegistrationForBothActions()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        var notes = new InMemoryNoteStore();
+        var module = new TrainingModule("module-one", "Module", 1, false,
+            [new TrainingPage("page", "Title", "text_page", "")]);
+        var controller = new LearningLogController(
+            new AccountService(new InMemoryAccountStore(account), notes, TimeProvider.System),
+            new TrainingJourneyService(new InMemoryContentProvider(module),
+                new InMemoryProgressStore(), notes, TimeProvider.System))
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub", "subject-1")], "test"))
+                }
+            }
+        };
+        var show = Assert.IsType<RedirectToActionResult>(await controller.Show(module.Name, CancellationToken.None));
+        var update = Assert.IsType<RedirectToActionResult>(await controller.Update(
+            module.Name, new LearningNoteModel { Content = "Not saved" }, CancellationToken.None));
+        Assert.Equal("Registration", show.ControllerName);
+        Assert.Equal("Terms", show.ActionName);
+        Assert.Equal("Registration", update.ControllerName);
+        Assert.Equal("Terms", update.ActionName);
+        Assert.Null(await notes.FindAsync(account.Id, module.Name, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("text_page", true, true)]
+    [InlineData("topic_intro", true, true)]
+    [InlineData("text_page", false, false)]
+    [InlineData("summative", true, false)]
+    [InlineData("feedback", true, false)]
+    public void NotesAreEnabledOnlyForFlaggedReadingPages(string type, bool flag, bool expected)
+    {
+        Assert.Equal(expected, new TrainingPage("page", "Title", type, "", Notes: flag).SupportsNotes);
+    }
+
     [Theory]
     [InlineData("confidence")]
     [InlineData("thankyou")]
@@ -1808,6 +2207,125 @@ public sealed class TrainingJourneyServiceTests
         Assert.Empty(await service.GetSelectedAnswersAsync(account, module.Name, "another-question", CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ConfidenceQuestionViewsRecordIdempotentStartAndCompletionByType()
+    {
+        var module = new TrainingModule("module-one", "Module", 1, false,
+        [
+            new("pre-one", "Pre one", "pre_confidence", ""),
+            new("pre-two", "Pre two", "pre_confidence", ""),
+            new("learning", "Learning", "sub_module_intro", ""),
+            new("post-one", "Post one", "confidence", "")
+        ]);
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+        var (_, account) = AccountNameController();
+
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "pre-one", CancellationToken.None);
+        var pre = Assert.IsType<ConfidenceCheckProgress>(progress.ConfidenceCheck(account.Id, module.Name, "pre"));
+        Assert.NotNull(pre.StartedAt);
+        Assert.Null(pre.CompletedAt);
+        var originalStart = pre.StartedAt;
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "pre-one", CancellationToken.None);
+        Assert.Equal(originalStart, pre.StartedAt);
+        Assert.Null(pre.CompletedAt);
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "pre-two", CancellationToken.None);
+        var preCompletion = pre.CompletedAt;
+        Assert.NotNull(preCompletion);
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "pre-two", CancellationToken.None);
+        Assert.Equal(preCompletion, pre.CompletedAt);
+
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "post-one", CancellationToken.None);
+        var post = Assert.IsType<ConfidenceCheckProgress>(progress.ConfidenceCheck(account.Id, module.Name, "post"));
+        Assert.NotNull(post.StartedAt);
+        Assert.Null(post.CompletedAt);
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "post-one", CancellationToken.None);
+        Assert.NotNull(post.CompletedAt);
+        Assert.Equal(2, progress.ConfidenceCheckCount(account.Id));
+    }
+
+    [Fact]
+    public async Task SingleConfidenceQuestionStartsOnFirstVisitAndCompletesOnSubsequentVisit()
+    {
+        var module = new TrainingModule("module-one", "Module", 1, false,
+            [new("question", "Question", "pre_confidence", "")]);
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+        var (_, account) = AccountNameController();
+
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "question", CancellationToken.None);
+        var check = progress.ConfidenceCheck(account.Id, module.Name, "pre");
+        Assert.NotNull(check?.StartedAt);
+        Assert.Null(check?.CompletedAt);
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "question", CancellationToken.None);
+        Assert.True(check!.CompletedAt >= check.StartedAt);
+    }
+
+    [Fact]
+    public async Task ConfidenceCheckLifecycleIsTriggeredByTrainingPageViews()
+    {
+        var module = new TrainingModule("module-one", "Module", 1, false,
+        [
+            new("pre-one", "Pre one", "pre_confidence", ""),
+            new("pre-two", "Pre two", "pre_confidence", ""),
+            new("learning", "Learning", "sub_module_intro", ""),
+            new("post-one", "Post one", "confidence", "")
+        ]);
+        var progress = new InMemoryProgressStore();
+        var controller = TestController(module, progressStore: progress);
+        var (_, account) = AccountNameController();
+
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "pre-one", CancellationToken.None));
+        Assert.NotNull(progress.ConfidenceCheck(account.Id, module.Name, "pre")?.StartedAt);
+        Assert.Null(progress.ConfidenceCheck(account.Id, module.Name, "pre")?.CompletedAt);
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "pre-two", CancellationToken.None));
+        Assert.NotNull(progress.ConfidenceCheck(account.Id, module.Name, "pre")?.CompletedAt);
+        Assert.Null(progress.ConfidenceCheck(account.Id, module.Name, "pre")?.SkippedAt);
+
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "learning", CancellationToken.None));
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "post-one", CancellationToken.None));
+        var post = Assert.IsType<ConfidenceCheckProgress>(progress.ConfidenceCheck(account.Id, module.Name, "post"));
+        Assert.NotNull(post.StartedAt);
+        Assert.Null(post.CompletedAt);
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "post-one", CancellationToken.None));
+        Assert.NotNull(post.CompletedAt);
+    }
+
+    [Fact]
+    public async Task FirstLearningStartMarksPreConfidenceSkippedOnlyWhenItWasNotStarted()
+    {
+        var module = new TrainingModule("module-one", "Module", 1, false,
+        [
+            new("before", "Before", "pre_confidence", ""),
+            new("learning", "Learning", "sub_module_intro", "")
+        ]);
+        var progress = new InMemoryProgressStore();
+        var service = new TrainingJourneyService(
+            new InMemoryContentProvider(module), progress, new InMemoryNoteStore(), TimeProvider.System);
+        var (_, account) = AccountNameController();
+
+        await service.RecordPageViewAsync(account, module.Name, "learning", CancellationToken.None);
+        var check = Assert.IsType<ConfidenceCheckProgress>(progress.ConfidenceCheck(account.Id, module.Name, "pre"));
+        Assert.NotNull(check.SkippedAt);
+        Assert.Null(check.StartedAt);
+        await service.RecordPageViewAsync(account, module.Name, "learning", CancellationToken.None);
+        Assert.NotNull(check.SkippedAt);
+
+        await service.RecordConfidenceCheckQuestionViewAsync(account, module.Name, "before", CancellationToken.None);
+        Assert.NotNull(check.StartedAt);
+        Assert.NotNull(check.SkippedAt);
+
+        var otherModule = new TrainingModule("other", "Other", 2, false,
+            [new("learning", "Learning", "sub_module_intro", "")]);
+        var otherProgress = new InMemoryProgressStore();
+        var otherService = new TrainingJourneyService(
+            new InMemoryContentProvider(otherModule), otherProgress, new InMemoryNoteStore(), TimeProvider.System);
+        await otherService.RecordPageViewAsync(account, otherModule.Name, "learning", CancellationToken.None);
+        Assert.Null(otherProgress.ConfidenceCheck(account.Id, otherModule.Name, "pre"));
+    }
+
     [Theory]
     [InlineData("confidence")]
     [InlineData("pre_confidence")]
@@ -1872,7 +2390,8 @@ public sealed class TrainingJourneyServiceTests
     private static TrainingController ConfidenceController(string pageType)
         => TestController(ConfidenceModule(pageType));
 
-    private static TrainingController TestController(TrainingModule module, bool registered = true)
+    private static TrainingController TestController(
+        TrainingModule module, bool registered = true, InMemoryProgressStore? progressStore = null)
     {
         var account = new UserAccount("subject-1", "person@example.test");
         account.AcceptTerms(DateTimeOffset.UtcNow);
@@ -1885,11 +2404,12 @@ public sealed class TrainingJourneyServiceTests
             Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
         }
         var notes = new InMemoryNoteStore();
+        progressStore ??= new InMemoryProgressStore();
         var controller = new TrainingController(
             new AccountService(new InMemoryAccountStore(account), notes, TimeProvider.System),
             new TrainingJourneyService(
                 new InMemoryContentProvider(module),
-                new InMemoryProgressStore(), notes, TimeProvider.System),
+                progressStore, notes, TimeProvider.System),
             new StubCertificatePdfRenderer())
         {
             ControllerContext = new ControllerContext
@@ -1908,6 +2428,18 @@ public sealed class TrainingJourneyServiceTests
     {
         public Task<byte[]> GenerateAsync(CertificateData certificate, CancellationToken cancellationToken) =>
             Task.FromResult("%PDF-test"u8.ToArray());
+    }
+
+    private sealed class NotesAuthenticationHandler(
+        IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
+        : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(
+                [new Claim("sub", "subject-1")], Scheme.Name));
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
+        }
     }
 
     private sealed class InMemoryTempDataProvider : ITempDataProvider
@@ -2045,11 +2577,35 @@ public sealed class TrainingJourneyServiceTests
             Task.FromResult<TrainingModule?>(module.Name == moduleName ? module : null);
     }
 
+    private sealed class InMemoryTrainingContentProvider(IReadOnlyList<TrainingModule> modules) : ITrainingContentProvider
+    {
+        public Task<IReadOnlyList<TrainingModule>> GetModulesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(modules);
+
+        public Task<TrainingModule?> GetModuleAsync(string moduleName, CancellationToken cancellationToken) =>
+            Task.FromResult(modules.SingleOrDefault(module => module.Name == moduleName));
+    }
+
     private sealed class InMemoryProgressStore : ITrainingProgressStore
     {
         private readonly List<TrainingModuleProgress> _progress = [];
         private readonly List<AssessmentAttempt> _attempts = [];
         private readonly List<TrainingResponse> _responses = [];
+        private readonly List<ConfidenceCheckProgress> _confidenceChecks = [];
+
+        public ConfidenceCheckProgress? ConfidenceCheck(long userId, string moduleName, string checkType) =>
+            _confidenceChecks.SingleOrDefault(check =>
+                check.UserAccountId == userId && check.ModuleName == moduleName && check.CheckType == checkType);
+
+        public int ConfidenceCheckCount(long userId) =>
+            _confidenceChecks.Count(check => check.UserAccountId == userId);
+
+        public void StartModule(long userId, string moduleName)
+        {
+            var moduleProgress = new TrainingModuleProgress(userId, moduleName);
+            moduleProgress.RecordStart(DateTimeOffset.UtcNow);
+            _progress.Add(moduleProgress);
+        }
 
         public Task<IReadOnlyList<TrainingModuleProgress>> GetForUserAsync(
             long userId,
@@ -2101,15 +2657,42 @@ public sealed class TrainingJourneyServiceTests
                 response.UserAccountId == userId && response.ModuleName == moduleName &&
                 response.QuestionName == questionName));
 
+        public Task<ConfidenceCheckProgress?> FindConfidenceCheckAsync(
+            long userId, string moduleName, string checkType, CancellationToken cancellationToken) =>
+            Task.FromResult(ConfidenceCheck(userId, moduleName, checkType));
+
+        public Task AddConfidenceCheckAsync(
+            ConfidenceCheckProgress confidenceCheck, CancellationToken cancellationToken)
+        {
+            _confidenceChecks.Add(confidenceCheck);
+            return Task.CompletedTask;
+        }
+
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class InMemoryNoteStore : ILearningNoteStore
     {
-        public Task<LearningNote?> FindAsync(long userId, string moduleName, CancellationToken cancellationToken) =>
-            Task.FromResult<LearningNote?>(null);
+        private readonly List<LearningNote> _notes = [];
 
-        public Task AddAsync(LearningNote note, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<LearningNote>> GetForUserAsync(long userId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<LearningNote>>(_notes
+                .Where(note => note.UserAccountId == userId)
+                .OrderByDescending(note => note.UpdatedAt)
+                .ToArray());
+
+        public Task<LearningNote?> FindAsync(long userId, string moduleName, CancellationToken cancellationToken) =>
+            FindPageAsync(userId, moduleName, "", cancellationToken);
+
+        public Task<LearningNote?> FindPageAsync(long userId, string moduleName, string pageName, CancellationToken cancellationToken) =>
+            Task.FromResult(_notes.SingleOrDefault(note => note.UserAccountId == userId &&
+                note.ModuleName == moduleName && note.PageName == pageName));
+
+        public Task AddAsync(LearningNote note, CancellationToken cancellationToken)
+        {
+            _notes.Add(note);
+            return Task.CompletedTask;
+        }
 
         public Task DeleteForUserAsync(long userId, CancellationToken cancellationToken) => Task.CompletedTask;
 

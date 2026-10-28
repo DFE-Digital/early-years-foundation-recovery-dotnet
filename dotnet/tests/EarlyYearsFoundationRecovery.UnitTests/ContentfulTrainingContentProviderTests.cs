@@ -11,6 +11,22 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class ContentfulTrainingContentProviderTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MapsLocalizedReflectionNotesFlag(bool enabled)
+    {
+        var response = JsonNode.Parse(ContentfulResponse)!;
+        var fields = response["includes"]!["Entry"]![0]!["fields"]!;
+        fields["page_type"] = "text_page";
+        fields["notes"] = new JsonObject { ["en-US"] = enabled };
+
+        var page = await MapPageResponseAsync(response.ToJsonString());
+
+        Assert.Equal(enabled, page.Notes);
+        Assert.Equal(enabled, page.SupportsNotes);
+    }
+
     [Fact]
     public async Task MapsUpcomingTextForNamedModuleWithoutPublishedPages()
     {

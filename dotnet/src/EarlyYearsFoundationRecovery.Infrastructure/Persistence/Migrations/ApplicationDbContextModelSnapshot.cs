@@ -146,6 +146,44 @@ namespace EarlyYearsFoundationRecovery.Infrastructure.Persistence.Migrations
                     b.ToTable("AssessmentAttempts");
                 });
 
+            modelBuilder.Entity("EarlyYearsFoundationRecovery.Domain.Training.ConfidenceCheckProgress", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CheckType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModuleName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("SkippedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("UserAccountId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserAccountId", "ModuleName", "CheckType")
+                        .IsUnique();
+
+                    b.ToTable("ConfidenceCheckProgress");
+                });
+
             modelBuilder.Entity("EarlyYearsFoundationRecovery.Domain.Training.LearningNote", b =>
                 {
                     b.Property<long>("Id")
@@ -164,6 +202,15 @@ namespace EarlyYearsFoundationRecovery.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("PageName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -172,7 +219,7 @@ namespace EarlyYearsFoundationRecovery.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserAccountId", "ModuleName")
+                    b.HasIndex("UserAccountId", "ModuleName", "PageName")
                         .IsUnique();
 
                     b.ToTable("LearningNotes");
@@ -298,6 +345,15 @@ namespace EarlyYearsFoundationRecovery.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Answers");
+                });
+
+            modelBuilder.Entity("EarlyYearsFoundationRecovery.Domain.Training.ConfidenceCheckProgress", b =>
+                {
+                    b.HasOne("EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount", null)
+                        .WithMany()
+                        .HasForeignKey("UserAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("EarlyYearsFoundationRecovery.Domain.Training.LearningNote", b =>

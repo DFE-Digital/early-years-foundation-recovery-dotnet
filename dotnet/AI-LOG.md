@@ -776,6 +776,103 @@ Nothing pushed. Next substantial feature: page-specific notes and consolidated
 learning log. Completion timing still requires an explicit decision; full
 PostgreSQL/browser and human UX/accessibility acceptance remain outstanding.
 
+### Checkpoint 15 (completed with Checkpoint 16): learning notes and consolidated log
+
+**User objective:** continue after Checkpoint 14 (`3e5d5240`). Compared Rails note
+identity, the flagged-page rule, forms, save/navigation behaviour and active
+module learning log with .NET.
+
+Contentful's localized notes flag now enables the editor only on text and topic
+introduction pages. Notes are identified by learner/module/page, with the CMS
+title retained. Save and continue updates an existing note instead of duplicating
+it, and follows the server-derived next page or module overview. Empty text clears
+the current page's note; validation retains submitted text without overwriting
+saved content. Posted title, learner and navigation values are not trusted.
+Saving a note does not itself write progress, assessments or completion.
+
+The additive EF migration gives existing module notes an empty page name, keeping
+their content and separate module editor. That editor now checks registration
+completion on both GET and POST, matching the training guard. No learner notes,
+answers or progress were changed in the shared local account.
+
+**Evidence:** the initial actual-Razor enabled-editor regression failed before
+the editor was wired. Focused tests cover notes flags, identity/separation,
+repeat edits, legacy preservation, clearing, the exact 20,000-character boundary,
+registration/draft/page guards and CMS navigation. A real HTTP test with isolated
+in-memory stores covers form binding, anti-forgery, encoded redisplay, validation,
+reopening, clearing and ignored spoofed fields. Full Release suite: **373 passed**.
+Editor diagnostics and whitespace checks passed.
+
+Restored the repository-declared EF tool after the initial command reported it
+missing. Generated/applied the migration to local PostgreSQL; EF reports no
+pending model changes. Restarted the development app; app/database health is
+healthy. Did not visit shared training pages merely for screenshots, because GET
+updates resume state. Local schema/health checks are not claimed as database
+ownership, restart durability or a full live browser/CMS journey.
+
+Added `/my-account/learning-log`, grouping notes under all published modules a
+registered learner has started, including modules with no notes. The aggregate
+includes dates and links to current Contentful pages; removed/renamed page notes
+remain visible without a stale link. Preserved module-level notes remain editable
+from their group. A header navigation link is hidden until the learner has
+completed registration and started published training. The module overview now
+links to the aggregate. Groups follow module position and notes follow most
+recent update order. The layout uses semantic sections rather than duplicating
+Rails' tab widget; no JavaScript tab behaviour was added.
+
+**Additional evidence:** service tests cover started/published module selection,
+module ordering, empty groups, draft exclusion and cross-user isolation.
+Rendered-Razor tests cover empty states, encoding, dates, page links and preserved
+legacy-note editing. Isolated HTTP coverage exercises the real shared layout:
+navigation hidden before progress, visible after progress, and aggregate state.
+The same HTTP case posts an edit through the retained legacy editor and confirms
+the note changes. Full Release suite: **378 passed**. EF reports no pending model
+changes; editor diagnostics and whitespace checks passed.
+
+README and N01-N03 updated. PostgreSQL concurrency, durability, ownership/closure,
+save failures and human UX/accessibility acceptance remain outstanding. This
+slice is included in the Checkpoint 16 commit below; nothing was pushed.
+
+### Checkpoint 16: confidence-check lifecycle state
+
+**User objective:** continue after the notes/log slice, then checkpoint. Compared Rails'
+`ConfidenceCheckProgress` transitions and page-view triggers with the current
+editable .NET confidence answers.
+
+Added one `ConfidenceCheckProgress` row per learner/module/check type (`pre` or
+`post`), with first-start, completion and optional pre-check skip timestamps.
+First-question GET records start; last-question GET records completion. For a
+single-question check, the first GET starts and a later GET completes, matching
+the Rails `if/elsif` event ordering. A completion reached without a prior start
+also records a start timestamp. The first `sub_module_intro` marks pre-check
+skipped only if pre-confidence questions exist and no start/completion was
+recorded; re-entering the intro is idempotent. Skipped checks may later be
+started. Answer selections remain separate, editable response records; no
+analytics or reporting events are claimed.
+
+Added an FK-cascaded table and unique user/module/check-type index. Generated and
+applied the migration to local PostgreSQL; EF reports no pending model changes.
+The schema change affects no existing learner records. No shared learner answer,
+progress or confidence data was changed for this check.
+
+**Evidence:** service tests cover distinct pre/post rows, multi-question and
+single-question starts/completions, repeated page views, first-start skip,
+revisits, later start after skip and no skip when pre-check was started or absent.
+Controller tests exercise the real page-view entry point. EF model metadata
+asserts the unique identity. Full Release suite: **382 passed**; editor
+diagnostics and whitespace checks passed. Local app/database health is healthy.
+This is not yet a PostgreSQL-backed journey, restart or concurrent-update test;
+those remain in acceptance.
+
+README and T07-T09 updated.
+
+**Checkpoint:** the user requested a checkpoint of the notes, consolidated log
+and confidence lifecycle changes together.
+Commit message: Add learning log and confidence check lifecycle.
+This log is included in that commit; Git history supplies its resulting hash.
+Latest full Release result: **382 passed**; migration/model and whitespace checks
+passed. The local app/database is healthy. Nothing pushed.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

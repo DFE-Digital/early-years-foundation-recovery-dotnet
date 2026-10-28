@@ -28,12 +28,21 @@ public interface ITrainingProgressStore
 
     Task<TrainingResponse?> GetLatestResponseAsync(long userId, string moduleName, string questionName, CancellationToken cancellationToken);
 
+    Task<ConfidenceCheckProgress?> FindConfidenceCheckAsync(
+        long userId, string moduleName, string checkType, CancellationToken cancellationToken);
+
+    Task AddConfidenceCheckAsync(ConfidenceCheckProgress confidenceCheck, CancellationToken cancellationToken);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }
 
 public interface ILearningNoteStore
 {
+    Task<IReadOnlyList<LearningNote>> GetForUserAsync(long userId, CancellationToken cancellationToken);
+
     Task<LearningNote?> FindAsync(long userId, string moduleName, CancellationToken cancellationToken);
+
+    Task<LearningNote?> FindPageAsync(long userId, string moduleName, string pageName, CancellationToken cancellationToken);
 
     Task AddAsync(LearningNote note, CancellationToken cancellationToken);
 

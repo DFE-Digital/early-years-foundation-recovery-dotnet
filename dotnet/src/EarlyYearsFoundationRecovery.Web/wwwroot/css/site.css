@@ -51,6 +51,17 @@ summary:focus {
   margin-block: 24px;
 }
 
+.learning-log-entry {
+  margin-block: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #b1b4b6;
+}
+
+.learning-log-entry__content {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .certificate-award {
   border-top: 6px solid #1d70b8;
   padding: 24px;

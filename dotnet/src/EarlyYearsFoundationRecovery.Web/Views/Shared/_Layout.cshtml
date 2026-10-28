@@ -18,6 +18,7 @@
                 @if (User.Identity?.IsAuthenticated == true)
                 {
                     <a asp-controller="Training" asp-action="Index">My modules</a>
+                    @await Component.InvokeAsync("LearningLogNavigation")
                     <a asp-controller="Account" asp-action="Index">My account</a>
                     <form asp-controller="Account" asp-action="SignOutUser" method="post" class="inline-form">
                         <button class="link-button" type="submit">Sign out</button>

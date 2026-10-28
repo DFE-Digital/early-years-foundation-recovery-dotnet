@@ -69,18 +69,43 @@ public sealed class TrainingProgressStore(ApplicationDbContext db) : ITrainingPr
             .ThenByDescending(response => response.Id)
             .FirstOrDefaultAsync(cancellationToken);
 
+    public Task<ConfidenceCheckProgress?> FindConfidenceCheckAsync(
+        long userId, string moduleName, string checkType, CancellationToken cancellationToken) =>
+        db.ConfidenceCheckProgress.SingleOrDefaultAsync(
+            check => check.UserAccountId == userId &&
+                     check.ModuleName == moduleName &&
+                     check.CheckType == checkType,
+            cancellationToken);
+
+    public Task AddConfidenceCheckAsync(
+        ConfidenceCheckProgress confidenceCheck, CancellationToken cancellationToken) =>
+        db.ConfidenceCheckProgress.AddAsync(confidenceCheck, cancellationToken).AsTask();
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         db.SaveChangesAsync(cancellationToken);
 }
 
 public sealed class LearningNoteStore(ApplicationDbContext db) : ILearningNoteStore
 {
+    public async Task<IReadOnlyList<LearningNote>> GetForUserAsync(
+        long userId, CancellationToken cancellationToken) =>
+        await db.LearningNotes
+            .Where(note => note.UserAccountId == userId)
+            .OrderByDescending(note => note.UpdatedAt)
+            .ToListAsync(cancellationToken);
+
     public Task<LearningNote?> FindAsync(
         long userId,
         string moduleName,
         CancellationToken cancellationToken) =>
         db.LearningNotes.SingleOrDefaultAsync(
-            note => note.UserAccountId == userId && note.ModuleName == moduleName,
+            note => note.UserAccountId == userId && note.ModuleName == moduleName && note.PageName == "",
+            cancellationToken);
+
+    public Task<LearningNote?> FindPageAsync(
+        long userId, string moduleName, string pageName, CancellationToken cancellationToken) =>
+        db.LearningNotes.SingleOrDefaultAsync(
+            note => note.UserAccountId == userId && note.ModuleName == moduleName && note.PageName == pageName,
             cancellationToken);
 
     public Task AddAsync(LearningNote note, CancellationToken cancellationToken) =>

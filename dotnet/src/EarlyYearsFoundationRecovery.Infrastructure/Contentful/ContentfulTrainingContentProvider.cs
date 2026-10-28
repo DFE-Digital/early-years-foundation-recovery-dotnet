@@ -112,7 +112,8 @@ public sealed class ContentfulTrainingContentProvider(ContentfulDeliveryClient c
             ContentfulDeliveryClient.StringField(fields, "failure_message", entries),
             ContentfulDeliveryClient.StringField(fields, "success_message", entries),
             ContentfulDeliveryClient.StringField(fields, "description", entries),
-            ContentfulDeliveryClient.StringField(fields, "hint"));
+            ContentfulDeliveryClient.StringField(fields, "hint"),
+            ContentfulDeliveryClient.Field(fields, "notes").ValueKind == JsonValueKind.True);
     }
 
     private static TrainingVideo MapVideo(JsonElement fields, IReadOnlyList<JsonElement> entries)

@@ -15,6 +15,8 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
 
     public DbSet<TrainingResponse> TrainingResponses => Set<TrainingResponse>();
 
+    public DbSet<ConfidenceCheckProgress> ConfidenceCheckProgress => Set<ConfidenceCheckProgress>();
+
     public DbSet<LearningNote> LearningNotes => Set<LearningNote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -90,12 +92,14 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
         modelBuilder.Entity<LearningNote>(entity =>
         {
             entity.HasKey(note => note.Id);
-            entity.HasIndex(note => new { note.UserAccountId, note.ModuleName }).IsUnique();
+            entity.HasIndex(note => new { note.UserAccountId, note.ModuleName, note.PageName }).IsUnique();
             entity.HasOne<UserAccount>()
                 .WithMany()
                 .HasForeignKey(note => note.UserAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.Property(note => note.ModuleName).HasMaxLength(200).IsRequired();
+            entity.Property(note => note.PageName).HasMaxLength(200).IsRequired();
+            entity.Property(note => note.Title).IsRequired();
             entity.Property(note => note.Content).HasMaxLength(20_000).IsRequired();
         });
 
@@ -109,6 +113,7 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
                 response.QuestionName,
                 response.CreatedAt
             });
+
             entity.HasOne<UserAccount>()
                 .WithMany()
                 .HasForeignKey(response => response.UserAccountId)
@@ -117,6 +122,18 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
             entity.Property(response => response.QuestionName).HasMaxLength(200).IsRequired();
             entity.Property(response => response.ResponseType).HasMaxLength(40).IsRequired();
             entity.Property(response => response.SelectedAnswerIdsJson).HasColumnName("selected_answer_ids").IsRequired();
+        });
+
+        modelBuilder.Entity<ConfidenceCheckProgress>(entity =>
+        {
+            entity.HasKey(check => check.Id);
+            entity.HasIndex(check => new { check.UserAccountId, check.ModuleName, check.CheckType }).IsUnique();
+            entity.HasOne<UserAccount>()
+                .WithMany()
+                .HasForeignKey(check => check.UserAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(check => check.ModuleName).HasMaxLength(200).IsRequired();
+            entity.Property(check => check.CheckType).HasMaxLength(10).IsRequired();
         });
     }
 }

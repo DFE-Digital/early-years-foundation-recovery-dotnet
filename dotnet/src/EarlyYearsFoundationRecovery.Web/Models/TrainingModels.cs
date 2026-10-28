@@ -73,6 +73,8 @@ public sealed record TrainingPageViewModel(
 
     public IReadOnlyList<string> SelectedAnswerIds { get; init; } = [];
 
+    public LearningNoteModel Note { get; init; } = new();
+
     public bool IsReadOnly =>
         (Page.PageType == "summative" && LatestAssessment?.Passed == true) ||
         (Page.PageType == "formative" && SelectedAnswerIds.Count > 0);
@@ -133,10 +135,25 @@ public sealed record TrainingPageViewModel(
 public sealed class LearningNoteModel
 {
     [StringLength(20_000)]
+    [DisplayFormat(ConvertEmptyStringToNull = false)]
     public string Content { get; set; } = string.Empty;
 }
 
 public sealed record LearningNoteViewModel(string ModuleName, LearningNoteModel Note);
+
+public sealed record LearningLogViewModel(IReadOnlyList<LearningLogModuleViewModel> Modules);
+
+public sealed record LearningLogModuleViewModel(
+    string ModuleName,
+    string ModuleTitle,
+    IReadOnlyList<LearningLogEntryViewModel> Notes);
+
+public sealed record LearningLogEntryViewModel(
+    string Title,
+    string? PageName,
+    string Content,
+    DateTimeOffset UpdatedAt,
+    bool IsLegacyModuleNote);
 
 public sealed record FormativeFeedbackViewModel(TrainingPage Question, bool Correct)
 {

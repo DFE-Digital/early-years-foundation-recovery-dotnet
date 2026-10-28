@@ -125,7 +125,21 @@ else
     {
         <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.PreviousPage.Name">Previous</a>
     }
-    @if (Model.NextPage is not null)
+    @if (Model.Page.SupportsNotes)
+    {
+        <form asp-controller="Training" asp-action="SaveNote" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.Page.Name" method="post">
+            <div asp-validation-summary="All" class="validation-summary" role="alert"></div>
+            <div class="form-group">
+                <h2>Add to your learning log</h2>
+                <p id="note-hint">Use this space to reflect on this page. Do not enter personal or sensitive information like children's names.</p>
+                <label asp-for="Note.Content">Your notes</label>
+                <textarea asp-for="Note.Content" rows="5" aria-describedby="note-hint note-error"></textarea>
+                <span asp-validation-for="Note.Content" class="field-error" id="note-error"></span>
+            </div>
+            <button class="button" type="submit">Save and continue</button>
+        </form>
+    }
+    else if (Model.NextPage is not null)
     {
         <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
     }

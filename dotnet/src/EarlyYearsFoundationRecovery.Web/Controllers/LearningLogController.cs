@@ -14,6 +14,31 @@ public sealed class LearningLogController(
     AccountService accounts,
     TrainingJourneyService training) : Controller
 {
+    [HttpGet("")]
+    public async Task<IActionResult> Index(CancellationToken cancellationToken)
+    {
+        var account = await CurrentAccountAsync(cancellationToken);
+        if (account is null)
+        {
+            return NotFound();
+        }
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
+        }
+
+        var groups = await training.GetLearningLogAsync(account, cancellationToken);
+        return View(new LearningLogViewModel(groups.Select(group => new LearningLogModuleViewModel(
+            group.Module.Name,
+            group.Module.Title,
+            group.Notes.Select(note => new LearningLogEntryViewModel(
+                string.IsNullOrWhiteSpace(note.Title) ? "Earlier module note" : note.Title,
+                group.Module.Pages.Any(page => page.Name == note.PageName) ? note.PageName : null,
+                note.Content,
+                note.UpdatedAt,
+                string.IsNullOrEmpty(note.PageName))).ToArray())).ToArray()));
+    }
+
     [HttpGet("{moduleName}")]
     public async Task<IActionResult> Show(string moduleName, CancellationToken cancellationToken)
     {
@@ -21,6 +46,11 @@ public sealed class LearningLogController(
         if (account is null)
         {
             return NotFound();
+        }
+
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
         }
 
         var module = await training.GetModuleAsync(moduleName, cancellationToken);
@@ -39,13 +69,18 @@ public sealed class LearningLogController(
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Update(
         string moduleName,
-        LearningNoteModel model,
+        [Bind(Prefix = "Note")] LearningNoteModel model,
         CancellationToken cancellationToken)
     {
         var account = await CurrentAccountAsync(cancellationToken);
         if (account is null)
         {
             return NotFound();
+        }
+
+        if (!account.IsRegistrationComplete)
+        {
+            return RedirectToAction("Terms", "Registration");
         }
 
         var module = await training.GetModuleAsync(moduleName, cancellationToken);

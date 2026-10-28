@@ -24,7 +24,11 @@ public sealed record TrainingPage(
     string FailureMessage = "",
     string SuccessMessage = "",
     string Description = "",
-    string Hint = "");
+    string Hint = "",
+    bool Notes = false)
+{
+    public bool SupportsNotes => Notes && PageType is "topic_intro" or "text_page";
+}
 
 public sealed record TrainingVideo(string? EmbedUrl, string Title, string Transcript);
 

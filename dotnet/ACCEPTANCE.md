@@ -1,9 +1,10 @@
 # Core rewrite acceptance inventory
 
-Checkpoint 14 on `rewrite/dotnet-core-journeys` includes registration review
-sequencing and the deferred-feedback boundary. Git history supplies the checkpoint
-commit hash. The latest local Release suite passed
-**347 tests**. See [the AI log](AI-LOG.md) for per-slice evidence and checkpoint history.
+Checkpoint 16 on `rewrite/dotnet-core-journeys` adds page-specific
+learning notes, the consolidated log and confidence-check lifecycle records.
+Git history supplies its commit hash. The
+latest local Release suite passed **382 tests**. See [the AI log](AI-LOG.md) for
+per-slice evidence and checkpoint history.
 This inventory is not a production-readiness declaration or evidence that CI ran.
 
 ## Scope and evidence
@@ -65,9 +66,9 @@ Rails references:
 | T04 | Viewing overview/pre-learning pages does not prematurely record module start | Implemented | Overview no longer writes a start; page views retain resume data independently. The service records start only for `sub_module_intro`; existing timestamps remain unchanged. Domain/service/controller regressions cover pre-confidence submission, direct page visits, listing state, revisits and legacy starts. Automated PostgreSQL lifecycle evidence remains part of Q02. |
 | T05 | Render supported content faithfully and safely, including feedback guidance and linked assets | Implemented | [Contentful mapping tests](tests/EarlyYearsFoundationRecovery.UnitTests/ContentfulTrainingContentProviderTests.cs) and [renderer tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingContentRendererTests.cs) cover rich text, assets, shortcodes and sanitization. Broader published-content coverage and unsupported rich-text layouts remain; see [supported limits](README.md). |
 | T06 | Video embeds, fallback links and keyboard-operable transcripts work in supported browsers | Unverified | Mapping/URL validation tested and live transcript/fallback checked. Normal-browser playback remains unverified; integrated-browser Vimeo playback aborted. |
-| T07 | Pre/post confidence answers restore, remain editable and advance without correctness feedback | Implemented | Controller/service and Razor coverage in [journey tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingJourneyServiceTests.cs) and [rendering tests](tests/EarlyYearsFoundationRecovery.UnitTests/AssessmentSummaryRenderingTests.cs); published hints checked manually. Add a complete persisted pre/post journey. |
-| T08 | Skip optional pre-confidence from its introduction and return without being forced into skipped questions | Implemented | Focused controller/Razor coverage and live keyboard/mobile checks. Skipping submits no answers, does not complete confidence and does not unlock certificates. |
-| T09 | Record distinct pre/post confidence started/completed/skipped lifecycle state idempotently | Missing | Answers persist, but no equivalent of [ConfidenceCheckProgress](../app/models/confidence_check_progress.rb) exists. Define and test lifecycle separately from deferred reporting/analytics. |
+| T07 | Pre/post confidence answers restore, remain editable and advance without correctness feedback | Implemented | Controller/service and Razor coverage in [journey tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingJourneyServiceTests.cs) and [rendering tests](tests/EarlyYearsFoundationRecovery.UnitTests/AssessmentSummaryRenderingTests.cs); published hints checked manually. Add a complete PostgreSQL-backed persisted pre/post journey. |
+| T08 | Skip optional pre-confidence from its introduction and return without being forced into skipped questions | Implemented | Focused controller/Razor and service lifecycle coverage. Skipping submits no answers, records only a skipped timestamp (not completion), and does not unlock certificates. Live keyboard/mobile checks covered the route. |
+| T09 | Record distinct pre/post confidence started/completed/skipped lifecycle state idempotently | Implemented | New `ConfidenceCheckProgress` entity and unique learner/module/type row record pre/post start/completion and optional pre-check skip. Page views and first learning start drive idempotent transitions; tests cover multi/single question, repeat views, skip, later start and independent check types. Add PostgreSQL restart/concurrency acceptance; reporting analytics remain deferred. |
 | T10 | Deferred feedback does not masquerade as working forms or trap the core learning journey | Partial | Actual feedback workflows remain deferred. Published feedback pages now show an explicit unavailable/no-submission notice instead of CMS question content. Continue without submitting feedback skips only consecutive feedback pages to the next normal page; the end-of-module fallback returns to the overview. No form/answer is saved and existing completion/certificate guards remain unchanged. Actual-Razor/model/controller tests cover conditional continuation, no form, rejected feedback POSTs, recorded visit only and unchanged eligibility. Human UX and full browser/PostgreSQL acceptance remain outstanding. |
 
 ## Assessments and certificates
@@ -96,9 +97,9 @@ Rails references:
 
 | ID | Acceptance case | Status | Current evidence and remaining work |
 |---|---|---|---|
-| N01 | Save/edit a note on a training notes page and continue to the correct next page | Partial | .NET has a separate per-module editor, not in-page notes. Rails identifies a note by learner/module/page and retains its title. Extend identity, persistence, view integration and navigation; preserve existing local module notes rather than silently discarding them. |
-| N02 | Show consolidated learning log grouped by active modules, including titles and empty states | Missing | No aggregate log route/view exists. [LearningLogController](src/EarlyYearsFoundationRecovery.Web/Controllers/LearningLogController.cs) requires a module. Implement aggregation and Rails navigation visibility after training starts. |
-| N03 | Preserve notes across restarts; prevent cross-user edits; show save failures and validation | Unverified | [Stores](src/EarlyYearsFoundationRecovery.Infrastructure/Persistence/Stores.cs) scope by user/module and save to PostgreSQL; editor limits content length. Add automated database/HTTP ownership, repeat-save, failure and account-closure cases alongside page-specific storage. |
+| N01 | Save/edit a note on a training notes page and continue to the correct next page | Implemented | CMS notes flags enable editors on text/topic-introduction pages. Notes use learner/module/page identity and retain the CMS title; POST navigation is server-derived. Service/controller/actual-Razor/HTTP tests cover separate notes, updates, clearing, 20,000-character boundary, encoded text, invalid destinations and anti-forgery. The additive EF migration preserves earlier module notes under an empty page name; their editor remains available. Local migration applied; live CMS/browser UX acceptance remains outstanding. |
+| N02 | Show consolidated learning log grouped by active modules, including titles and empty states | Implemented | [Learning log](src/EarlyYearsFoundationRecovery.Web/Controllers/LearningLogController.cs) groups all notes for each published started module, including empty groups and retained legacy module notes. The navigation is hidden until a registered learner starts published training. Service tests cover ordering, empty groups, draft exclusion and user isolation; HTTP tests cover route, nav visibility and empty state; Razor tests cover encoding, dates and links. Human UX/accessibility and live Contentful acceptance remain outstanding. |
+| N03 | Preserve notes across restarts; prevent cross-user edits; show save failures and validation | Unverified | [Stores](src/EarlyYearsFoundationRecovery.Infrastructure/Persistence/Stores.cs) scope by learner/module/page, backed by a unique index. In-memory service/HTTP tests cover repeat-save identity, separation, spoofed posted identity/title/navigation, validation and clearing; these do not establish PostgreSQL ownership/durability. Both note editors require completed registration. Add database/restart/concurrency/save-failure and account-closure evidence. |
 
 ## Cross-cutting acceptance gates
 
@@ -135,10 +136,10 @@ vulnerabilities or completed audits.
    Continue testing failed/passed/direct-entry/revisit cases.
 4. **Account parity (A04-A09).** Translate registration branches and account editing
    into repeatable tests, add missing edit surfaces and consistent guards.
-5. **Page-specific notes (N01-N03).** Extend storage without losing existing module
-   notes, wire training-page editing and consolidated log, then ownership/closure.
-6. **Confidence lifecycle (T09).** Build on corrected module-start/completion rules;
-   preserve editable answers and optional pre-check behaviour.
+5. **Page-specific notes (N01-N03).** In-page editing, additive storage and the
+   consolidated log are implemented. Next: database ownership/durability/closure.
+6. **Confidence lifecycle (T07-T09).** Lifecycle state is implemented and
+   migrated. Next: PostgreSQL-backed answer/lifecycle journey and concurrency.
 7. **Integration and acceptance gates (A01-A03, Q01-Q07).** Add PostgreSQL/HTTP
    evidence as the earlier slices land, then exercise real One Login and deployment
    runtime and complete accessibility/operational review. These are not a final

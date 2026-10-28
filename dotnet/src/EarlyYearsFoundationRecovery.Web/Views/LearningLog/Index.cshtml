@@ -1,0 +1,58 @@
+@model EarlyYearsFoundationRecovery.Web.Models.LearningLogViewModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Learning log";
+}
+<h1>Learning log</h1>
+<p>Use your learning log to review notes you have saved as you work through your modules.</p>
+@if (Model.Modules.Count == 0)
+{
+    <p>You have not started any modules yet.</p>
+}
+else
+{
+    @foreach (var module in Model.Modules)
+    {
+        <section aria-labelledby="module-@module.ModuleName">
+            <h2 id="module-@module.ModuleName">Notes for @module.ModuleTitle</h2>
+            @if (module.Notes.Count == 0)
+            {
+                <p>You have not made any notes for this module.</p>
+            }
+            else
+            {
+                @foreach (var note in module.Notes)
+                {
+                    <article class="learning-log-entry">
+                        <p class="hint">@note.UpdatedAt.ToString("d MMMM yyyy", CultureInfo.GetCultureInfo("en-GB"))</p>
+                        @if (note.PageName is not null)
+                        {
+                            <h3 class="heading-small">
+                                <a asp-controller="Training" asp-action="Page"
+                                   asp-route-moduleName="@module.ModuleName" asp-route-pageName="@note.PageName">@note.Title</a>
+                            </h3>
+                        }
+                        else if (note.IsLegacyModuleNote)
+                        {
+                            <h3 class="heading-small">
+                                <a asp-action="Show" asp-route-moduleName="@module.ModuleName">@note.Title</a>
+                            </h3>
+                        }
+                        else
+                        {
+                            <h3 class="heading-small">@note.Title</h3>
+                        }
+                        @if (string.IsNullOrWhiteSpace(note.Content))
+                        {
+                            <p>You have not made any notes on this page yet.</p>
+                        }
+                        else
+                        {
+                            <p class="learning-log-entry__content">@note.Content</p>
+                        }
+                    </article>
+                }
+            }
+        </section>
+    }
+}
