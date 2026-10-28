@@ -1,8 +1,8 @@
 # Core rewrite acceptance inventory
 
-Checkpoint 28 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
-journey acceptance after committed slices 17-20 (`5b78d2c7`).
-The latest local Release suite passed **399 tests**, including seventeen PostgreSQL
+Checkpoint 30 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
+journey acceptance after committed slice 28 (`dde7cd82`).
+The latest local Release suite passed **401 tests**, including nineteen PostgreSQL
 integration cases with none skipped. See [the AI log](AI-LOG.md) for
 per-slice evidence and checkpoint history.
 This inventory is not a production-readiness declaration or evidence that CI ran.
@@ -184,6 +184,20 @@ checks both routes and unchanged saved names. Integrated-browser validation
 confirmed summary focus and Tab/Enter navigation into an invalid field; returning
 to the account confirmed no name changes. This is not a full Q04 accessibility
 review; other forms and assistive-technology/browser combinations remain.
+Account email/research preference forms now also have focused linked error
+summaries, Error-prefixed titles and radio/group-associated errors. HTTP tests
+cover missing selections on both routes with unchanged saved preferences.
+The integrated browser confirmed summary focus and Tab/Enter navigation into
+the first email radio choice after a deliberately empty submission; no valid
+preference change was saved. This is supplementary targeted evidence, not Q04
+sign-off.
+The account location form now provides the same focused linked summary and
+Error-prefixed title for country/authority validation. Invalid authority controls
+retain both hint and error associations. HTTP coverage checks rejected edits
+preserve saved data and normal GETs omit invalid state. The integrated browser
+confirmed summary focus and Tab/Enter navigation into the authority select;
+returning to the account confirmed saved location unchanged. Other forms and
+assistive-technology combinations still need review.
 
 - Preserve passing-assessment requirements while deciding completion timing.
   Rails behaviour and the current stricter .NET guard must be reconciled explicitly.

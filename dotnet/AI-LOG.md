@@ -1212,6 +1212,55 @@ Final full Release validation: **399 passed, none skipped**, PostgreSQL enabled.
 Whitespace checks passed. Includes shared name-form accessibility changes,
 HTTP regression and browser evidence. Nothing pushed. Continuing separately.
 
+### Checkpoint 29 (in progress): preference-form error recovery
+
+User requested "checkpoint and continue". Committed slice 28 as `dde7cd82`
+(`Improve name form validation and keyboard error recovery`); nothing pushed.
+Then improved the shared account email/research preference form with a labelled,
+focused and linked error summary, Error-prefixed page title, and invalid state/
+error descriptions on both radio choices and the fieldset. Existing valid-save
+behaviour and headings are unchanged.
+
+Added HTTP coverage of missing selections on both routes and fresh-context
+assertions that neither saved preference changed. Targeted validation/edit
+cases passed; full Release suite with PostgreSQL enabled: **400 passed, none
+skipped**. Editor diagnostics passed.
+
+Restarted the local app and checked the shared browser. To exercise the missing
+selection case on a prefilled edit form, cleared only the in-browser radio
+selection using Playwright before submitting; the rejected form focused the
+summary. Tab/Enter navigated its link to the first radio. Returned to My account
+and verified email/research preferences were unchanged. No valid edit submitted.
+This is targeted browser evidence, not a screen-reader/accessibility sign-off.
+Updated README/acceptance; this slice remains uncommitted.
+
+### Checkpoint 30 (in progress): location-form error recovery
+
+**User objective:** continue targeted learner form accessibility. Updated account
+location with Error-prefixed title, focused/labelled linked error summary and
+invalid/error associations on country/authority selects. Authority keeps its
+existing hint alongside the error description. Unknown/model-level errors remain
+visible without fabricated field links. No validation or persistence rules changed.
+
+Added HTTP coverage of invalid country and authority, unchanged saved account
+fields, and absence of invalid state on a normal GET. Targeted cases passed;
+full Release suite with PostgreSQL enabled: **401 passed, none skipped**.
+Editor diagnostics passed. Restarted local app and submitted only an invalid
+missing-authority edit in the shared browser. Summary received focus; Tab/Enter
+focused the authority control with both hint/error associations. Returned to My
+account and confirmed England/York unchanged; no valid profile edit submitted.
+Updated README/acceptance; this and slice 29 remain uncommitted. Nothing pushed.
+This is targeted evidence, not full accessibility sign-off.
+
+#### Checkpoint commit for slices 29-30
+
+User requested "checkpoint". Checkpoint commit:
+`Improve preference and location form error recovery`.
+Full Release validation: **401 passed, none skipped**, PostgreSQL enabled.
+Whitespace checks passed. Includes preference/location accessibility changes,
+HTTP regressions and targeted keyboard browser evidence; saved learner details
+unchanged. Nothing pushed. Local app remains running.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

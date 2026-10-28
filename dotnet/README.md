@@ -138,7 +138,7 @@ EYFR_TEST_POSTGRES='Host=localhost;Database=postgres;Username=your_local_role' \
   dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --configuration Release
 ```
 
-Without this variable the sixteen PostgreSQL cases are explicitly reported as
+Without this variable the nineteen PostgreSQL cases are explicitly reported as
 skipped; other tests run normally. CI configures a PostgreSQL 17 service and
 enables these tests. They cover upgrading existing notes, fresh-context
 reads/edits, learner isolation, confidence answers/lifecycle, account-closure
@@ -178,6 +178,14 @@ saved values after successful changes.
 The shared registration/account name form has a focused linked error summary,
 an Error-prefixed page title and field-associated error text. HTTP tests cover
 both routes and ensure rejected edits leave the saved name unchanged.
+Account email/research preference forms provide the same error-recovery features,
+with errors associated to the radio group and each choice. HTTP tests confirm
+missing selections leave both preferences unchanged; targeted browser checks
+verify keyboard navigation from the error summary to the radio group.
+The account location form also has linked, focused errors and an Error-prefixed
+title. Invalid country/authority selections identify their errors, retaining
+the local-authority guidance alongside the error description. HTTP tests verify
+rejected edits preserve saved values and normal GETs have no invalid state.
 A closure HTTP case checks reason validation, repeated confirmation after
 sign-out, a second already-authenticated session and subsequent Development
 sign-in. Old notes are deleted; retained assessment/progress records stay linked

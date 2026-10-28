@@ -6,6 +6,68 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed partial class PostgresPersistenceTests
 {
     [PostgresFact]
+    public async Task HttpInvalidLocationHasLinkedErrorsAndRetainsHintWithoutSaving()
+    {
+        await SeedEditableAccountAsync();
+        using var factory = CreateHttpFactory();
+        using var client = CreateRegistrationClient(factory);
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        using (var invalidCountry = await SubmitFormAsync(client, "/account/location", "/account/location",
+            ("Country", "unknown"), ("LocalAuthority", "Leeds")))
+        {
+            Assert.Equal(HttpStatusCode.OK, invalidCountry.StatusCode);
+            var html = await invalidCountry.Content.ReadAsStringAsync();
+            Assert.Contains("<title>Error: Change where you live", html);
+            Assert.Contains("tabindex=\"-1\" autofocus", html);
+            Assert.Contains("href=\"#Country\"", html);
+            Assert.Contains("Select a valid country.", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"country-error\"", html);
+        }
+        using (var invalidAuthority = await SubmitFormAsync(client, "/account/location", "/account/location",
+            ("Country", "england"), ("LocalAuthority", "unknown")))
+        {
+            Assert.Equal(HttpStatusCode.OK, invalidAuthority.StatusCode);
+            var html = await invalidAuthority.Content.ReadAsStringAsync();
+            Assert.Contains("href=\"#LocalAuthority\"", html);
+            Assert.Contains("Select a valid local authority.", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"authority-hint authority-error\"", html);
+            Assert.Contains("id=\"authority-error\"", html);
+            Assert.Contains("id=\"authority-hint\"", html);
+        }
+        await AssertOriginalEditableAccountAsync();
+        var validForm = await client.GetStringAsync("/account/location");
+        Assert.DoesNotContain("aria-invalid=\"true\"", validForm);
+        Assert.DoesNotContain("<title>Error:", validForm);
+        Assert.Contains("aria-describedby=\"authority-hint\"", validForm);
+    }
+
+    [PostgresFact]
+    public async Task HttpMissingPreferenceHasLinkedErrorsWithoutChangingEitherPreference()
+    {
+        await SeedEditableAccountAsync();
+        using var factory = CreateHttpFactory();
+        using var client = CreateRegistrationClient(factory);
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        foreach (var path in new[] { "/account/email-preferences", "/account/research-preferences" })
+        {
+            using var invalid = await SubmitFormAsync(client, path, path);
+            Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+            var html = await invalid.Content.ReadAsStringAsync();
+            Assert.Contains("<title>Error:", html);
+            Assert.Contains("There is a problem", html);
+            Assert.Contains("tabindex=\"-1\" autofocus", html);
+            Assert.Contains("href=\"#preference-yes\"", html);
+            Assert.Contains("Select yes or no.", html);
+            Assert.Contains("id=\"preference-error\"", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"preference-error\"", html);
+            await using var db = CreateContext();
+            var account = await db.UserAccounts.SingleAsync();
+            Assert.False(account.TrainingEmails);
+            Assert.True(account.ResearchParticipant);
+        }
+    }
+
+    [PostgresFact]
     public async Task HttpInvalidNameHasLinkedErrorsWithoutChangingSavedName()
     {
         await SeedEditableAccountAsync();

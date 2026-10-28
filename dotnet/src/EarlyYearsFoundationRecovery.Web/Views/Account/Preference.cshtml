@@ -1,19 +1,39 @@
 @model EarlyYearsFoundationRecovery.Web.Models.AccountPreferenceModel
 @{
     var research = ViewData["IsResearchPreference"] is true;
-    ViewData["Title"] = research ? "Change research preferences" : "Change email preferences";
+    var title = research ? "Change research preferences" : "Change email preferences";
+    ViewData["Title"] = ViewData.ModelState.IsValid ? title : $"Error: {title}";
+    var selectionInvalid = ViewData.ModelState[nameof(Model.Selected)]?.Errors.Count > 0;
     var question = research
         ? "Would you like to take part in research about the training?"
         : "Can we email you about your training?";
 }
-<h1>@ViewData["Title"]</h1>
-<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="validation-summary" role="alert" aria-labelledby="preference-errors-title" tabindex="-1" autofocus>
+        <h2 id="preference-errors-title">There is a problem</h2>
+        <ul>
+            @foreach (var entry in ViewData.ModelState)
+            {
+                if (entry.Value is not { } state)
+                {
+                    continue;
+                }
+                foreach (var error in state.Errors)
+                {
+                    <li><a href="#preference-yes">@error.ErrorMessage</a></li>
+                }
+            }
+        </ul>
+    </div>
+}
+<h1>@title</h1>
 <form asp-controller="Account" asp-action="@(research ? "ResearchPreferences" : "EmailPreferences")" method="post">
-    <fieldset class="form-group">
+    <fieldset class="form-group" aria-describedby="@(selectionInvalid ? "preference-error" : null)">
         <legend>@question</legend>
-        <label class="radio-label"><input type="radio" asp-for="Selected" id="preference-yes" value="true" /> Yes</label>
-        <label class="radio-label"><input type="radio" asp-for="Selected" id="preference-no" value="false" /> No</label>
-        <span asp-validation-for="Selected" class="field-error"></span>
+        <label class="radio-label"><input type="radio" asp-for="Selected" id="preference-yes" value="true" aria-invalid="@(selectionInvalid ? "true" : null)" aria-describedby="@(selectionInvalid ? "preference-error" : null)" /> Yes</label>
+        <label class="radio-label"><input type="radio" asp-for="Selected" id="preference-no" value="false" aria-invalid="@(selectionInvalid ? "true" : null)" aria-describedby="@(selectionInvalid ? "preference-error" : null)" /> No</label>
+        <span asp-validation-for="Selected" class="field-error" id="preference-error"></span>
     </fieldset>
     <button class="button" type="submit">Save</button>
 </form>

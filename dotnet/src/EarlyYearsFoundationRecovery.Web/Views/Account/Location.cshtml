@@ -1,34 +1,63 @@
 @model EarlyYearsFoundationRecovery.Web.Models.AccountLocationModel
 @{
-    ViewData["Title"] = "Change where you live";
+    ViewData["Title"] = ViewData.ModelState.IsValid ? "Change where you live" : "Error: Change where you live";
+    var countryInvalid = ViewData.ModelState[nameof(Model.Country)]?.Errors.Count > 0;
+    var authorityInvalid = ViewData.ModelState[nameof(Model.LocalAuthority)]?.Errors.Count > 0;
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="validation-summary" role="alert" aria-labelledby="location-errors-title" tabindex="-1" autofocus>
+        <h2 id="location-errors-title">There is a problem</h2>
+        <ul>
+            @foreach (var entry in ViewData.ModelState.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+            {
+                if (entry.Value is not { } state)
+                {
+                    continue;
+                }
+                foreach (var error in state.Errors)
+                {
+                    <li>
+                        @if (entry.Key is nameof(Model.Country) or nameof(Model.LocalAuthority))
+                        {
+                            <a href="#@entry.Key">@error.ErrorMessage</a>
+                        }
+                        else
+                        {
+                            @error.ErrorMessage
+                        }
+                    </li>
+                }
+            }
+        </ul>
+    </div>
 }
 <h1>Change where you live</h1>
-<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
 <form asp-controller="Account" asp-action="Location" method="post">
     <div class="form-group">
         <label asp-for="Country">Country</label>
-        <select asp-for="Country" class="select-input">
+        <select asp-for="Country" class="select-input" aria-invalid="@(countryInvalid ? "true" : null)" aria-describedby="@(countryInvalid ? "country-error" : null)">
             <option value="">Select a country</option>
             @foreach (var country in Model.Countries)
             {
                 <option value="@country.Id">@country.Name</option>
             }
         </select>
-        <span asp-validation-for="Country" class="field-error"></span>
+        <span asp-validation-for="Country" class="field-error" id="country-error"></span>
     </div>
     @if (Model.SettingRequiresLocalAuthority)
     {
         <div class="form-group">
             <label asp-for="LocalAuthority">Local authority</label>
             <p id="authority-hint">If you live in England, select the local authority your setting is in. Otherwise, leave this blank.</p>
-            <select asp-for="LocalAuthority" class="select-input" aria-describedby="authority-hint">
+            <select asp-for="LocalAuthority" class="select-input" aria-invalid="@(authorityInvalid ? "true" : null)" aria-describedby="@(authorityInvalid ? "authority-hint authority-error" : "authority-hint")">
                 <option value="">Select a local authority</option>
                 @foreach (var authority in Model.LocalAuthorities)
                 {
                     <option value="@authority.Id">@authority.Name</option>
                 }
             </select>
-            <span asp-validation-for="LocalAuthority" class="field-error"></span>
+            <span asp-validation-for="LocalAuthority" class="field-error" id="authority-error"></span>
         </div>
     }
     <button class="button" type="submit">Save</button>
