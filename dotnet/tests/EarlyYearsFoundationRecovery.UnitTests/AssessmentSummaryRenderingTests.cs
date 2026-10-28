@@ -24,6 +24,48 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeferredFeedbackShowsExplicitBoundaryWithoutQuestionOrSubmission(bool hasContinuation)
+    {
+        var feedback = new TrainingPage("feedback-one", "Tell us what you think", "feedback",
+            "CMS feedback question should not appear", [new("yes", "Feedback option")]);
+        var pages = new List<TrainingPage>
+        {
+            feedback,
+            new("feedback-two", "More feedback", "feedback", "Another feedback question")
+        };
+        if (hasContinuation)
+        {
+            pages.Add(new("reflection", "Reflect", "confidence", "Confidence question"));
+        }
+        var module = new TrainingModule("module-one", "Module one", 1, false, pages);
+        var html = await RenderAsync(new TrainingPageViewModel(module, feedback, pages[1], null),
+            "/Views/Training/Page.cshtml");
+
+        Assert.Contains("Feedback collection is not available in this version of the service.", html);
+        Assert.Contains("No feedback has been submitted.", html);
+        Assert.Contains("<h1>Module feedback</h1>", html);
+        Assert.DoesNotContain("Tell us what you think", html);
+        Assert.DoesNotContain("CMS feedback question should not appear", html);
+        Assert.DoesNotContain("Feedback option", html);
+        Assert.DoesNotContain("<form", html);
+        Assert.DoesNotContain("Your module is complete.", html);
+        Assert.DoesNotContain("pageName=feedback-two", html);
+        Assert.DoesNotContain("/content/feedback-two", html);
+        if (hasContinuation)
+        {
+            Assert.Contains("href=\"/training/module-one/content/reflection\"", html);
+            Assert.Contains("Continue without submitting feedback</a>", html);
+        }
+        else
+        {
+            Assert.Contains("href=\"/training/module-one\"", html);
+            Assert.Contains("Return to module</a>", html);
+        }
+    }
+
+    [Theory]
     [InlineData(true, "England", "other")]
     [InlineData(true, "Scotland", "other")]
     [InlineData(false, "England", "none")]
@@ -50,7 +92,7 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         Assert.Contains("__RequestVerificationToken", html);
         Assert.Contains("&lt;Custom setting&gt;", html);
         Assert.DoesNotContain("<Custom setting>", html);
-        Assert.Contains("href=\"/registration/setting-type\"", html);
+        Assert.Contains("href=\"/registration/setting-type?returnTo=check-your-answers\"", html);
         Assert.Contains("Change setting</a>", html);
         Assert.Contains("Change training email preference</a>", html);
         Assert.Contains("Change research preference</a>", html);
@@ -61,9 +103,9 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
 
         var authorityApplicable = requiresAuthority && country == "England";
         Assert.Equal(authorityApplicable, html.Contains("<dt>Local authority</dt>", StringComparison.Ordinal));
-        Assert.Equal(authorityApplicable, html.Contains("href=\"/registration/local-authority\"", StringComparison.Ordinal));
-        Assert.Equal(roleGroup != "none", html.Contains("href=\"/registration/role-type\"", StringComparison.Ordinal));
-        Assert.Equal(roleGroup != "none", html.Contains("href=\"/registration/early-years-experience\"", StringComparison.Ordinal));
+        Assert.Equal(authorityApplicable, html.Contains("href=\"/registration/local-authority?returnTo=check-your-answers\"", StringComparison.Ordinal));
+        Assert.Equal(roleGroup != "none", html.Contains("href=\"/registration/role-type?returnTo=check-your-answers\"", StringComparison.Ordinal));
+        Assert.Equal(roleGroup != "none", html.Contains("href=\"/registration/early-years-experience?returnTo=check-your-answers\"", StringComparison.Ordinal));
         Assert.Equal(roleGroup != "none", html.Contains("New to early years", StringComparison.Ordinal));
         Assert.Equal(roleGroup != "none", html.Contains("&lt;Custom educator&gt;", StringComparison.Ordinal));
         Assert.DoesNotContain("<Custom educator>", html);
@@ -105,7 +147,7 @@ public sealed class AssessmentSummaryRenderingTests : IClassFixture<WebApplicati
         Assert.Contains("<dt>Experience</dt><dd>New to early years ", html);
         Assert.Contains("<dt>Training emails</dt><dd>Yes ", html);
         Assert.Contains("<dt>Research participation</dt><dd>No ", html);
-        Assert.Contains("href=\"/registration/local-authority\"", html);
+        Assert.Contains("href=\"/registration/local-authority?returnTo=check-your-answers\"", html);
     }
 
     [Theory]

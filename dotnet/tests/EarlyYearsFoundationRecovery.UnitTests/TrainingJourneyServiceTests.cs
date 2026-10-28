@@ -18,6 +18,209 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed class TrainingJourneyServiceTests
 {
     [Theory]
+    [InlineData("confidence")]
+    [InlineData("thankyou")]
+    [InlineData("certificate")]
+    [InlineData("page")]
+    public void DeferredFeedbackContinuationStopsAtFirstNonFeedbackPage(string nextType)
+    {
+        var feedback = new TrainingPage("feedback", "Feedback", "feedback", "");
+        var next = new TrainingPage("next", "Next", nextType, "");
+        var module = new TrainingModule("module", "Module", 1, false,
+        [
+            feedback, new("feedback-two", "More feedback", "feedback", ""), next,
+            new("later", "Later", "thankyou", "")
+        ]);
+        var model = new TrainingPageViewModel(module, feedback, module.Pages[1], null);
+
+        Assert.Same(next, model.AfterFeedbackPage);
+        Assert.Null(new TrainingPageViewModel(module, next, module.Pages[3], null).AfterFeedbackPage);
+    }
+
+    [Fact]
+    public void DeferredFeedbackContinuationIsAbsentForUnlistedPage()
+    {
+        var module = ConfidenceModule("confidence");
+        var model = new TrainingPageViewModel(module, new("missing", "Feedback", "feedback", ""),
+            module.Pages[0], null);
+
+        Assert.Null(model.AfterFeedbackPage);
+    }
+
+    [Fact]
+    public async Task DeferredFeedbackCannotSubmitAnswersOrCompleteModule()
+    {
+        var module = ConfidenceModule("summative") with
+        {
+            Pages =
+            [
+                new("test", "Test", "summative", "Question", [new("1", "Yes")], ["1"]),
+                new("feedback-one", "Feedback", "feedback", "Question", [new("yes", "Yes")]),
+                new("feedback-two", "Feedback", "feedback", "Question"),
+                new("thanks", "Thank you", "thankyou", ""),
+                new("certificate", "Certificate", "certificate", "")
+            ]
+        };
+        var controller = TestController(module);
+
+        Assert.IsType<ViewResult>(await controller.Page(module.Name, "feedback-one", CancellationToken.None));
+        Assert.IsType<NotFoundResult>(await controller.Answer(module.Name, "feedback-one",
+            new TrainingAnswerModel { SelectedAnswerIds = ["yes"] }, CancellationToken.None));
+        var thanks = Assert.IsType<RedirectToActionResult>(
+            await controller.Page(module.Name, "thanks", CancellationToken.None));
+        Assert.Equal("Module", thanks.ActionName);
+        var certificate = Assert.IsType<RedirectToActionResult>(
+            await controller.Certificate(module.Name, CancellationToken.None));
+        Assert.Equal("Module", certificate.ActionName);
+        var overview = Assert.IsType<TrainingModuleDetailViewModel>(
+            Assert.IsType<ViewResult>(await controller.Module(module.Name, CancellationToken.None)).Model);
+        Assert.Null(overview.CompletedAt);
+        Assert.Null(overview.LatestAssessment);
+        Assert.Equal(["feedback-one"], overview.VisitedPageNames);
+    }
+
+    [Fact]
+    public async Task RegistrationReviewNameReturnsToSummaryAndSummaryEndsReview()
+    {
+        var (controller, account) = RegistrationReviewController();
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Name(new NameModel { FirstName = "Casey", LastName = "Jones" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("Casey", account.FirstName);
+        Assert.False(account.IsRegistrationComplete);
+        await controller.CheckAnswers(CancellationToken.None);
+        Assert.False(controller.TempData.ContainsKey("RegistrationReviewSubject"));
+        Assert.Equal("Location", Assert.IsType<RedirectToActionResult>(
+            await controller.Name(new NameModel { FirstName = "Alex", LastName = "Example" },
+                CancellationToken.None)).ActionName);
+    }
+
+    [Fact]
+    public async Task RegistrationReviewCountryChangeCollectsAuthorityThenReturnsToSummary()
+    {
+        var (controller, account) = RegistrationReviewController();
+        account.UpdateLocation("Scotland", null);
+        Assert.Equal("LocalAuthority", Assert.IsType<RedirectToActionResult>(
+            await controller.Location(new LocationModel { Country = "england" }, CancellationToken.None)).ActionName);
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.LocalAuthority(new LocalAuthorityModel { LocalAuthority = "example" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("Example council", account.LocalAuthority);
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Location(new LocationModel { Country = "scotland" }, CancellationToken.None)).ActionName);
+        Assert.Null(account.LocalAuthority);
+        Assert.Equal("Practitioner", account.RoleType);
+        Assert.Equal("new", account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task RegistrationReviewSettingCollectsAllNewDependentAnswers()
+    {
+        var (controller, account) = RegistrationReviewController();
+        account.UpdateSetting("training", null, false, "none");
+        Assert.Equal("LocalAuthority", Assert.IsType<RedirectToActionResult>(
+            await controller.Setting(new SettingModel { SettingType = "nursery" }, CancellationToken.None)).ActionName);
+        Assert.Equal("Role", Assert.IsType<RedirectToActionResult>(
+            await controller.LocalAuthority(new LocalAuthorityModel { LocalAuthority = "example" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("Experience", Assert.IsType<RedirectToActionResult>(
+            await controller.Role(new RoleModel { RoleType = "other", RoleTypeOther = "Educator" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Experience(new ExperienceModel { EarlyYearsExperience = "new" },
+                CancellationToken.None)).ActionName);
+        Assert.False(account.IsRegistrationComplete);
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Setting(new SettingModel { SettingType = "training" },
+                CancellationToken.None)).ActionName);
+        Assert.Null(account.LocalAuthority);
+        Assert.Equal("N/A", account.RoleType);
+        Assert.Null(account.EarlyYearsExperience);
+    }
+
+    [Fact]
+    public async Task RegistrationReviewOutsideEnglandSkipsAuthority()
+    {
+        var (controller, account) = RegistrationReviewController();
+        account.UpdateLocation("Scotland", null);
+        Assert.Equal("Role", Assert.IsType<RedirectToActionResult>(
+            await controller.Setting(new SettingModel { SettingType = "childminder" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("Experience", Assert.IsType<RedirectToActionResult>(
+            await controller.Role(new RoleModel { RoleType = "Childminder" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Experience(new ExperienceModel { EarlyYearsExperience = "experienced" },
+                CancellationToken.None)).ActionName);
+    }
+
+    [Fact]
+    public async Task RegistrationReviewInvalidAnswerRetainsReviewAndDoesNotSave()
+    {
+        var (controller, account) = RegistrationReviewController();
+        Assert.IsType<ViewResult>(await controller.Role(new RoleModel { RoleType = "unknown" },
+            CancellationToken.None));
+        Assert.Equal("subject-1", controller.TempData.Peek("RegistrationReviewSubject"));
+        Assert.Equal("Practitioner", account.RoleType);
+        controller.ModelState.Clear();
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Role(new RoleModel { RoleType = "Practitioner" },
+                CancellationToken.None)).ActionName);
+    }
+
+    [Fact]
+    public async Task RegistrationReviewCollectsMissingTermsAndPreferencesWithoutCompletingAccount()
+    {
+        var account = new UserAccount("subject-1", "person@example.test");
+        account.UpdateName("Alex", "Example");
+        account.UpdateLocation("Scotland", null);
+        account.UpdateSetting("training", null, false, "none");
+        var controller = RegistrationControllerFor(account);
+        controller.TempData["RegistrationReviewSubject"] = "subject-1";
+
+        Assert.Equal("Terms", Assert.IsType<RedirectToActionResult>(
+            await controller.Name(new NameModel { FirstName = "Casey", LastName = "Jones" },
+                CancellationToken.None)).ActionName);
+        Assert.Equal("Preferences", Assert.IsType<RedirectToActionResult>(
+            await controller.Terms(new TermsModel { Accepted = true }, CancellationToken.None)).ActionName);
+        Assert.Equal("CheckAnswers", Assert.IsType<RedirectToActionResult>(
+            await controller.Preferences(new PreferencesModel { TrainingEmails = false, ResearchParticipant = false },
+                CancellationToken.None)).ActionName);
+        Assert.False(account.IsRegistrationComplete);
+        Assert.IsType<RedirectToActionResult>(await controller.CompleteRegistration(CancellationToken.None));
+        Assert.False(controller.TempData.ContainsKey("RegistrationReviewSubject"));
+    }
+
+    [Theory]
+    [InlineData(true, "subject-1")]
+    [InlineData(false, "different-subject")]
+    public async Task RegistrationReviewDoesNotAffectCompletedAccountsOrAnotherIdentity(bool complete, string subject)
+    {
+        var (controller, account) = RegistrationReviewController();
+        if (complete)
+        {
+            Assert.True(account.CompleteRegistration(DateTimeOffset.UtcNow));
+        }
+        controller.TempData["RegistrationReviewSubject"] = subject;
+        Assert.Equal("Location", Assert.IsType<RedirectToActionResult>(
+            await controller.Name(new NameModel { FirstName = "Alex", LastName = "Example" },
+                CancellationToken.None)).ActionName);
+    }
+
+    private static (RegistrationController Controller, UserAccount Account) RegistrationReviewController()
+    {
+        var (_, account) = AccountNameController(registered: false);
+        account.UpdateSetting("nursery", null, true, "other");
+        account.UpdateLocation("England", "Example council");
+        account.UpdateRole("Practitioner", null);
+        account.UpdateExperience("new");
+        var controller = RegistrationControllerFor(account);
+        controller.TempData = new TempDataDictionary(controller.HttpContext, new InMemoryTempDataProvider());
+        controller.TempData["RegistrationReviewSubject"] = "subject-1";
+        return (controller, account);
+    }
+
+    [Theory]
     [InlineData(false, "nursery", null, "new", "Nursery", "New to early years")]
     [InlineData(true, "nursery", null, "experienced", "Nursery", "Experienced")]
     [InlineData(false, "other", "<Custom setting>", "new", "<Custom setting>", "New to early years")]
@@ -271,8 +474,9 @@ public sealed class TrainingJourneyServiceTests
         Assert.True(account.IsRegistrationComplete);
     }
 
-    private static RegistrationController RegistrationControllerFor(UserAccount account) =>
-        new(new AccountService(new InMemoryAccountStore(account), new InMemoryNoteStore(), TimeProvider.System),
+    private static RegistrationController RegistrationControllerFor(UserAccount account)
+    {
+        var controller = new RegistrationController(new AccountService(new InMemoryAccountStore(account), new InMemoryNoteStore(), TimeProvider.System),
             new AccountTestOptions())
         {
             ControllerContext = new ControllerContext
@@ -283,6 +487,9 @@ public sealed class TrainingJourneyServiceTests
                 }
             }
         };
+        controller.TempData = new TempDataDictionary(controller.HttpContext, new InMemoryTempDataProvider());
+        return controller;
+    }
 
     [Fact]
     public async Task AccountSettingPrefillsAndChoosingANewSettingDoesNotSave()

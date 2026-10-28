@@ -5,6 +5,7 @@ using EarlyYearsFoundationRecovery.Domain.Accounts;
 using EarlyYearsFoundationRecovery.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 
 namespace EarlyYearsFoundationRecovery.Web.Controllers;
 
@@ -14,6 +15,18 @@ public sealed class RegistrationController(
     AccountService accounts,
     IRegistrationOptionsProvider options) : Controller
 {
+    private const string ReviewSubjectKey = "RegistrationReviewSubject";
+
+    public override void OnActionExecuting(ActionExecutingContext context)
+    {
+        if (Request.Query["returnTo"] == "check-your-answers" &&
+            User.FindFirstValue("sub") is { Length: > 0 } subject)
+        {
+            TempData[ReviewSubjectKey] = subject;
+        }
+        base.OnActionExecuting(context);
+    }
+
     [HttpGet("terms-and-conditions")]
     public IActionResult Terms() => View(new TermsModel());
 
@@ -33,7 +46,7 @@ public sealed class RegistrationController(
         }
 
         await accounts.UpdateTermsAsync(account, cancellationToken);
-        return RedirectToAction(nameof(Name));
+        return NextStep(account, nameof(Name));
     }
 
     [HttpGet("name")]
@@ -61,7 +74,7 @@ public sealed class RegistrationController(
         }
 
         await accounts.UpdateNameAsync(account, model.FirstName, model.LastName, cancellationToken);
-        return RedirectToAction(nameof(Location));
+        return NextStep(account, nameof(Location));
     }
 
     [HttpGet("where-you-live")]
@@ -102,7 +115,7 @@ public sealed class RegistrationController(
         }
 
         await accounts.UpdateLocationAsync(account, selectedCountry!.Name, null, cancellationToken);
-        return RedirectToAction(nameof(Setting));
+        return NextStep(account, nameof(Setting));
     }
 
     [HttpGet("setting-type")]
@@ -161,7 +174,7 @@ public sealed class RegistrationController(
             selectedSetting.RequiresLocalAuthority,
             selectedSetting.RoleGroup,
             cancellationToken);
-        return RedirectToAction(nameof(LocalAuthority));
+        return NextStep(account, nameof(LocalAuthority));
     }
 
     [HttpGet("local-authority")]
@@ -175,7 +188,7 @@ public sealed class RegistrationController(
 
         if (!RequiresLocalAuthority(account))
         {
-            return RedirectToAction(nameof(Role));
+            return NextStep(account, nameof(Role));
         }
 
         ViewBag.LocalAuthorities = options.GetLocalAuthorities();
@@ -200,7 +213,7 @@ public sealed class RegistrationController(
 
         if (!RequiresLocalAuthority(account))
         {
-            return RedirectToAction(nameof(Role));
+            return NextStep(account, nameof(Role));
         }
 
         var authority = options.GetLocalAuthorities()
@@ -217,7 +230,7 @@ public sealed class RegistrationController(
         }
 
         await accounts.UpdateLocalAuthorityAsync(account, authority!.Name, cancellationToken);
-        return RedirectToAction(nameof(Role));
+        return NextStep(account, nameof(Role));
     }
 
     [HttpGet("role-type")]
@@ -231,7 +244,7 @@ public sealed class RegistrationController(
 
         if (account.RoleGroup == "none")
         {
-            return RedirectToAction(nameof(Preferences));
+            return NextStep(account, nameof(Preferences));
         }
 
         ViewBag.Roles = options.GetRoleChoices(account.RoleGroup ?? "other");
@@ -254,7 +267,7 @@ public sealed class RegistrationController(
 
         if (account.RoleGroup == "none")
         {
-            return RedirectToAction(nameof(Preferences));
+            return NextStep(account, nameof(Preferences));
         }
 
         var roles = options.GetRoleChoices(account.RoleGroup ?? "other");
@@ -280,7 +293,7 @@ public sealed class RegistrationController(
             model.RoleType,
             model.RoleTypeOther?.Trim(),
             cancellationToken);
-        return RedirectToAction(nameof(Experience));
+        return NextStep(account, nameof(Experience));
     }
 
     [HttpGet("early-years-experience")]
@@ -294,7 +307,7 @@ public sealed class RegistrationController(
 
         if (account.RoleGroup == "none")
         {
-            return RedirectToAction(nameof(Preferences));
+            return NextStep(account, nameof(Preferences));
         }
 
         ViewBag.Experiences = options.GetExperiences();
@@ -316,7 +329,7 @@ public sealed class RegistrationController(
 
         if (account.RoleGroup == "none")
         {
-            return RedirectToAction(nameof(Preferences));
+            return NextStep(account, nameof(Preferences));
         }
 
         if (!options.GetExperiences().Any(experience => experience.Id == model.EarlyYearsExperience))
@@ -331,7 +344,7 @@ public sealed class RegistrationController(
         }
 
         await accounts.UpdateExperienceAsync(account, model.EarlyYearsExperience, cancellationToken);
-        return RedirectToAction(nameof(Preferences));
+        return NextStep(account, nameof(Preferences));
     }
 
     [HttpGet("preferences")]
@@ -367,7 +380,7 @@ public sealed class RegistrationController(
             model.TrainingEmails!.Value,
             model.ResearchParticipant!.Value,
             cancellationToken);
-        return RedirectToAction(nameof(CheckAnswers));
+        return NextStep(account, nameof(CheckAnswers));
     }
 
     [HttpGet("check-your-answers")]
@@ -400,11 +413,13 @@ public sealed class RegistrationController(
             return View("CheckAnswers", account);
         }
 
+        TempData.Remove(ReviewSubjectKey);
         return RedirectToAction("Index", "Training");
     }
 
     private async Task PopulateSummaryAsync(UserAccount account, CancellationToken cancellationToken)
     {
+        TempData.Remove(ReviewSubjectKey);
         var setting = (await options.GetSettingsAsync(cancellationToken))
             .SingleOrDefault(item => item.Id == account.SettingType);
         ViewBag.SettingName = account.SettingType == "other"
@@ -412,6 +427,57 @@ public sealed class RegistrationController(
             : setting?.Name ?? account.SettingType;
         ViewBag.ExperienceName = options.GetExperiences()
             .SingleOrDefault(item => item.Id == account.EarlyYearsExperience)?.Name ?? account.EarlyYearsExperience;
+    }
+
+    private RedirectToActionResult NextStep(UserAccount account, string normalNextStep)
+    {
+        if (account.IsRegistrationComplete || TempData.Peek(ReviewSubjectKey) as string != account.GovOneSubject)
+        {
+            return RedirectToAction(normalNextStep);
+        }
+
+        string next;
+        if (account.TermsAndConditionsAgreedAt is null)
+        {
+            next = nameof(Terms);
+        }
+        else if (string.IsNullOrWhiteSpace(account.FirstName) || string.IsNullOrWhiteSpace(account.LastName))
+        {
+            next = nameof(Name);
+        }
+        else if (string.IsNullOrWhiteSpace(account.Country))
+        {
+            next = nameof(Location);
+        }
+        else if (string.IsNullOrWhiteSpace(account.SettingType) ||
+                 (account.SettingType == "other" && string.IsNullOrWhiteSpace(account.SettingTypeOther)))
+        {
+            next = nameof(Setting);
+        }
+        else if (RequiresLocalAuthority(account) && string.IsNullOrWhiteSpace(account.LocalAuthority))
+        {
+            next = nameof(LocalAuthority);
+        }
+        else if (account.RoleGroup != "none" &&
+                 (string.IsNullOrWhiteSpace(account.RoleType) ||
+                  (account.RoleType == "other" && string.IsNullOrWhiteSpace(account.RoleTypeOther))))
+        {
+            next = nameof(Role);
+        }
+        else if (account.RoleGroup != "none" && string.IsNullOrWhiteSpace(account.EarlyYearsExperience))
+        {
+            next = nameof(Experience);
+        }
+        else if (account.TrainingEmails is null || account.ResearchParticipant is null)
+        {
+            next = nameof(Preferences);
+        }
+        else
+        {
+            next = nameof(CheckAnswers);
+        }
+
+        return RedirectToAction(next);
     }
 
     private static bool RequiresLocalAuthority(UserAccount account) =>

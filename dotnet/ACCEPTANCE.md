@@ -1,7 +1,9 @@
 # Core rewrite acceptance inventory
 
-Reviewed: 27 October 2026. Runtime baseline: `1dbb8b61` on
-`rewrite/dotnet-core-journeys`. The latest local Release suite passed 173 tests.
+Checkpoint 14 on `rewrite/dotnet-core-journeys` includes registration review
+sequencing and the deferred-feedback boundary. Git history supplies the checkpoint
+commit hash. The latest local Release suite passed
+**347 tests**. See [the AI log](AI-LOG.md) for per-slice evidence and checkpoint history.
 This inventory is not a production-readiness declaration or evidence that CI ran.
 
 ## Scope and evidence
@@ -38,9 +40,9 @@ Rails references:
 | A01 | Sign in with One Login; identify the learner; sign out locally and at the provider | Unverified | OIDC/PKCE and private-key JWT are wired in [startup](src/EarlyYearsFoundationRecovery.Web/Program.cs); [assertion tests](tests/EarlyYearsFoundationRecovery.UnitTests/GovOneClientAssertionTests.cs) cover the JWT, not a real provider exchange. Exercise integration-environment sign-in, callback, user info and logout. |
 | A02 | Handle cancelled/failed sign-in and expired sessions with a usable recovery journey | Unverified | Framework authentication/session configuration exists. Add HTTP/integration cases for provider errors, missing claims and session expiry; inspect user-facing recovery. |
 | A03 | Development sign-in is unavailable outside Development | Unverified | Environment guard exists in [AccountController](src/EarlyYearsFoundationRecovery.Web/Controllers/AccountController.cs); [smoke tests](tests/EarlyYearsFoundationRecovery.UnitTests/WebJourneySmokeTests.cs) verify only the development page. Add non-development HTTP coverage. |
-| A04 | Complete standard registration, including local authority, role, experience and explicit preferences | Partial | [RegistrationController](src/EarlyYearsFoundationRecovery.Web/Controllers/RegistrationController.cs), [domain tests](tests/EarlyYearsFoundationRecovery.UnitTests/UserAccountTests.cs) and [reference-data tests](tests/EarlyYearsFoundationRecovery.UnitTests/RegistrationReferenceDataTests.cs) exist. Controller journey tests submit each step through completion for standard and childminder settings, with reference validation and saved authority prefill. The [summary](src/EarlyYearsFoundationRecovery.Web/Views/Registration/CheckAnswers.cshtml) shows friendly labels, Yes/No preferences, explicit missing answers and labelled edit links; rejected completion retains metadata and validation errors. Controller/actual-Razor coverage verifies summary behaviour; live HTTP checks cover selected forms without changing learner data. Full Rails-equivalent browser/PostgreSQL cases and review sequencing remain outstanding. |
+| A04 | Complete standard registration, including local authority, role, experience and explicit preferences | Partial | [RegistrationController](src/EarlyYearsFoundationRecovery.Web/Controllers/RegistrationController.cs), [domain tests](tests/EarlyYearsFoundationRecovery.UnitTests/UserAccountTests.cs) and [reference-data tests](tests/EarlyYearsFoundationRecovery.UnitTests/RegistrationReferenceDataTests.cs) exist. Controller journey tests submit each step through completion for standard and childminder settings, with reference validation and saved authority prefill. The [summary](src/EarlyYearsFoundationRecovery.Web/Views/Registration/CheckAnswers.cshtml) shows friendly labels, Yes/No preferences, explicit missing answers and labelled review links; rejected completion retains metadata and validation errors. Controller/actual-Razor and isolated HTTP coverage verify summary/review behaviour; live HTTP checks cover selected forms without changing learner data. Full Rails-equivalent browser/PostgreSQL acceptance remains outstanding. |
 | A05 | Complete custom-setting/custom-role and conditional non-England/no-role paths | Partial | General roles include other with a required trimmed description, available without JavaScript; childminder roles reject general/custom choices. Account/registration choices share a helper. Controller journey tests complete custom-setting/custom-role, non-England, authority-without-role and no-role branches, and cover stale-field clearing, skipped-step POSTs and missing replacements preventing completion. Actual-Razor tests cover role form applicability and summaries that omit inapplicable answers/links and encode custom text. Combined custom fields differ from Rails' separate screens. Full browser/PostgreSQL acceptance and human approval of UX differences remain outstanding. |
-| A06 | Save drafts, revisit steps and resume registration without losing answers or bypassing required fields | Unverified | Each update persists and domain completion checks required fields. Add PostgreSQL restart/resume and direct-step navigation cases; verify terms and validation sequencing. |
+| A06 | Save drafts, revisit steps and resume registration without losing answers or bypassing required fields | Partial | Each update persists and domain completion checks required fields. Summary review links retain identity-bound review mode across requests; valid edits collect first outstanding required answers or return to summary, and invalid input stays on the form. Controller tests cover newly required authority/role/experience, terms/preferences, normal-flow preservation, completed-account/identity isolation and review termination. [HTTP tests](tests/EarlyYearsFoundationRecovery.UnitTests/RegistrationReviewHttpTests.cs) use isolated in-memory accounts and real cookie TempData, form binding and anti-forgery for name, country and setting changes. PostgreSQL restart/resume, full direct-step validation sequencing and browser acceptance remain outstanding. |
 | A07 | View and change account name, location, setting, role and contact/research preferences | Partial | [Account page](src/EarlyYearsFoundationRecovery.Web/Views/Account/Index.cshtml) shows name/email/registration, country/applicable authority, setting, role/experience and email/research preferences. Dedicated edits prefill values, validate and save back with confirmation; Cancel does not submit. Country/authority and role/experience use combined forms. [Setting edit](src/EarlyYearsFoundationRecovery.Web/Views/Account/Setting.cshtml) selects a setting without saving, then validates and saves all applicable dependent answers together; invalid inputs leave every saved answer untouched. These atomic account edits intentionally differ from Rails' separately persisted steps. Registration remains unchanged. Controller/actual-Razor tests cover reference/group validation, conditional clearing, single-save persistence, validation redisplay, independent preferences and guards; live HTTP checks cover no-save preview, invalid choices, anti-forgery and unchanged-value persistence. Human UX/accessibility review and full HTTP/PostgreSQL acceptance remain outstanding. |
 | A08 | Close an account with reason, confirmation/cancel, redaction, note deletion and sign-out | Unverified | [AccountService](src/EarlyYearsFoundationRecovery.Application/Accounts/AccountService.cs) and controller implement closure; domain test covers idempotency. Add full HTTP/PostgreSQL cases for redaction, deletion, cancellation, repeat requests and subsequent sign-in. Deferred feedback storage must be considered when introduced. |
 | A09 | Enforce learner identity, registration and ownership consistently across core routes | Partial | [training tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingJourneyServiceTests.cs) cover registration guards; selected anonymous routes have HTTP coverage. [LearningLogController](src/EarlyYearsFoundationRecovery.Web/Controllers/LearningLogController.cs) requires authentication but lacks the training registration guard. Add cross-user and all-route negative cases. |
@@ -66,7 +68,7 @@ Rails references:
 | T07 | Pre/post confidence answers restore, remain editable and advance without correctness feedback | Implemented | Controller/service and Razor coverage in [journey tests](tests/EarlyYearsFoundationRecovery.UnitTests/TrainingJourneyServiceTests.cs) and [rendering tests](tests/EarlyYearsFoundationRecovery.UnitTests/AssessmentSummaryRenderingTests.cs); published hints checked manually. Add a complete persisted pre/post journey. |
 | T08 | Skip optional pre-confidence from its introduction and return without being forced into skipped questions | Implemented | Focused controller/Razor coverage and live keyboard/mobile checks. Skipping submits no answers, does not complete confidence and does not unlock certificates. |
 | T09 | Record distinct pre/post confidence started/completed/skipped lifecycle state idempotently | Missing | Answers persist, but no equivalent of [ConfidenceCheckProgress](../app/models/confidence_check_progress.rb) exists. Define and test lifecycle separately from deferred reporting/analytics. |
-| T10 | Deferred feedback does not masquerade as working forms or trap the core learning journey | Deferred | Feedback question submission is unsupported; published feedback pages remain in the flat sequence. Provide an explicit, tested boundary/continuation without claiming feedback was submitted. Do not invent completion semantics. |
+| T10 | Deferred feedback does not masquerade as working forms or trap the core learning journey | Partial | Actual feedback workflows remain deferred. Published feedback pages now show an explicit unavailable/no-submission notice instead of CMS question content. Continue without submitting feedback skips only consecutive feedback pages to the next normal page; the end-of-module fallback returns to the overview. No form/answer is saved and existing completion/certificate guards remain unchanged. Actual-Razor/model/controller tests cover conditional continuation, no form, rejected feedback POSTs, recorded visit only and unchanged eligibility. Human UX and full browser/PostgreSQL acceptance remain outstanding. |
 
 ## Assessments and certificates
 
@@ -117,7 +119,7 @@ vulnerabilities or completed audits.
 
 1. **Training lifecycle baseline (T04, T03): implemented locally.** Page views are
    separate from module start, resume information and old timestamps are preserved,
-   and completion eligibility is unchanged. Latest local Release suite: 185 passed.
+   and completion eligibility is unchanged.
    Automated PostgreSQL lifecycle verification remains outstanding under Q02.
 2. **Overview structure and availability (T01, T02, T03).** Establish required CMS
    metadata, then translate Rails section/topic and CTA cases. Link availability
@@ -125,11 +127,12 @@ vulnerabilities or completed audits.
    link rules and description/outcomes/criteria are implemented locally.
    Grouped course-list states, graded-test actions, completed dates/certificates
    and upcoming cards are implemented; full Rails release-integrity classification
-   remains a separate gate. Latest local Release suite: 232 passed.
-3. **Completion and deferred-feedback boundary (S05, T10).** Agree certificate
-   eligibility and the user-visible deferred-feedback route before implementation.
-   Test failed/passed/direct-entry/revisit cases; retain the pass guard until an
-   explicit decision says otherwise.
+   remains a separate gate.
+3. **Completion and deferred-feedback boundary (S05, T10).** The explicit
+   unavailable-feedback continuation is implemented locally, pending human UX and
+   end-to-end acceptance. Completion timing/eligibility remains an explicit
+   decision; preserve thank-you timing and the existing pass guard until agreed.
+   Continue testing failed/passed/direct-entry/revisit cases.
 4. **Account parity (A04-A09).** Translate registration branches and account editing
    into repeatable tests, add missing edit surfaces and consistent guards.
 5. **Page-specific notes (N01-N03).** Extend storage without losing existing module
@@ -145,7 +148,7 @@ vulnerabilities or completed audits.
 
 - Preserve passing-assessment requirements while deciding completion timing.
   Rails behaviour and the current stricter .NET guard must be reconciled explicitly.
-- Agree how learners continue past deferred feedback without implied submission.
+- Review the explicit unavailable-feedback continuation without implied submission.
 - Route shape, combined registration screens, account return navigation and design
   system differences are not automatically approved merely because they exist.
 - Rich-text support must cover required published content or reject unsupported

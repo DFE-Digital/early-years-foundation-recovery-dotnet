@@ -71,6 +71,19 @@
         }
     </form>
 }
+else if (Model.Page.PageType == "feedback")
+{
+    <p>Feedback collection is not available in this version of the service.</p>
+    <p>No feedback has been submitted.</p>
+    @if (Model.AfterFeedbackPage is { } continuation)
+    {
+        <a class="button" asp-controller="Training" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@continuation.Name">Continue without submitting feedback</a>
+    }
+    else
+    {
+        <a class="button" asp-controller="Training" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+    }
+}
 else
 {
     <div class="content-body">

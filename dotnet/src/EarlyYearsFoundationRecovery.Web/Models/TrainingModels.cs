@@ -67,6 +67,7 @@ public sealed record TrainingPageViewModel(
         "confidence" or "pre_confidence" => "Confidence check",
         "formative" => "Learning check",
         "summative" => "End of module test",
+        "feedback" => "Module feedback",
         _ => Page.Title
     };
 
@@ -78,6 +79,21 @@ public sealed record TrainingPageViewModel(
 
     public bool IsFormativeAnswerCorrect =>
         AssessmentGrader.IsCorrect(Page.CorrectAnswerIds ?? [], SelectedAnswerIds);
+
+    public TrainingPage? AfterFeedbackPage
+    {
+        get
+        {
+            if (Page.PageType != "feedback")
+            {
+                return null;
+            }
+            var index = Module.Pages.ToList().IndexOf(Page);
+            return index >= 0
+                ? Module.Pages.Skip(index + 1).FirstOrDefault(page => page.PageType != "feedback")
+                : null;
+        }
+    }
 
     public TrainingPage? SkipPreConfidencePage
     {

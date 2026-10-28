@@ -689,6 +689,93 @@ Nothing pushed. Next: return-to-summary review/resume sequencing, including newl
 required answers after country or setting changes. Human UX/accessibility review
 and full browser/PostgreSQL acceptance remain outstanding.
 
+### Checkpoint 14: registration review and deferred-feedback boundary
+
+**User objective:** continue after Checkpoint 13 (`883bb795`). Verified the rewrite
+branch and clean worktree before editing. Compared Rails review/resume rules.
+
+Summary Change links now start review mode for unfinished registrations. Successful
+edits collect the first outstanding required answer, otherwise return directly to
+the summary. Country/setting changes collect newly required authority, role and
+experience; non-applicable fields retain the existing clearing behaviour. Terms,
+custom descriptions and both explicit preferences participate in routing.
+Validation errors retain review mode. Viewing the summary, rejected-completion
+summary rendering or successful completion clears it. Review does not itself
+complete registration; normal forward registration and completed accounts retain
+their previous routing.
+
+Used the existing protected cookie TempData provider for a subject-bound marker
+rather than adding server sessions. The fixed review query value is not a return
+URL; redirects use named local actions only. A different authenticated subject
+cannot use the marker. This differs internally from Rails' session storage but
+preserves the reviewed journey behaviour and existing .NET combined forms.
+
+**Red before green:** five of seven initial controller review cases failed;
+completed-account and other-subject cases already passed. Added missing terms/
+preferences and marker-clearing coverage. Four isolated HTTP tests use in-memory
+accounts, sample reference data and test authentication with real cookie TempData,
+MVC binding and anti-forgery. They verify invalid-then-valid name edit, review end/
+normal-flow restoration, setting-to-role/experience progression, country-to-
+authority progression and missing-token rejection. Actual-Razor tests verify
+review URLs on applicable summary links. Full Release suite: **339 passed**.
+Editor diagnostics and whitespace checks passed.
+
+**Manual evidence:** restarted local app/database health was healthy. The shared
+browser session had expired; signed back in with the development test-user form.
+All nine live summary edit links carried the review marker, with no overflow at
+375px. No learner answers or training state were changed. The live learner is
+already registered, so unfinished-review save behaviour is isolated automated HTTP
+evidence, not a claimed live registration/browser click journey.
+
+Updated README/A04/A06; A06 is now Partial, not complete. PostgreSQL restart/resume,
+full direct-step sequencing and browser/UX acceptance remain outstanding.
+This continuation is uncommitted; nothing pushed.
+
+#### Explicit deferred-feedback boundary
+
+**User objective:** continue after reviewing the remaining plan. Asked whether to
+move completion from thank-you to certificate access while retaining the pass guard.
+The user was unavailable; did not treat that as approval to change completion
+semantics. Kept timing, eligibility and existing recorded completion dates unchanged.
+
+Implemented the safer deferred-feedback boundary: published feedback pages now use
+a neutral Module feedback heading and explain that collection is unavailable and
+no feedback has been submitted. CMS question bodies/options and forms are not
+displayed. Continue without submitting feedback links to the first following
+non-feedback page, skipping only consecutive feedback pages; with no continuation,
+Return to module is shown. Normal confidence, thank-you and certificate routes
+retain their behaviour/guards. No answers, assessments or completion are written
+by viewing this boundary; the existing page visit/resume write remains, and skipped
+feedback pages are not marked visited. This is a documented interim boundary
+requiring human UX review, not implementation of the deferred feedback workflow.
+
+**Red before green:** both initial actual-Razor cases failed on the missing notice;
+the existing controller rejection/eligibility case passed. Added continuation
+boundary tests for confidence, thank-you, certificate, ordinary and unlisted pages,
+no-continuation fallback, neutral heading and suppression of CMS content/forms.
+Controller coverage verifies feedback POST rejection, only the viewed page being
+recorded, no assessment/completion, and unchanged pass/certificate guards.
+Full Release suite: **347 passed**. Editor diagnostics and whitespace checks passed.
+
+Restarted the local app and checked database/app health. Did not visit feedback
+pages on the shared learner because that would change saved page/resume state;
+feedback presentation/navigation evidence is actual-Razor/model/controller tests,
+not a claimed live CMS/browser journey. No learner answers or training state were
+changed. Refreshed the acceptance inventory's stale baseline/test totals and
+documented T10 as Partial pending human/end-to-end acceptance.
+
+README and acceptance inventory updated. Completion timing still requires a user
+decision; page-specific notes/consolidated log remain the next substantial feature.
+This slice and registration review sequencing remain uncommitted; nothing pushed.
+
+**Checkpoint:** the user requested a checkpoint of both verified slices.
+Commit message: Add registration review sequencing and deferred feedback boundary.
+This log is included in that commit; Git history supplies its resulting hash.
+Latest full Release result: **347 passed**; checkpoint whitespace checks passed.
+Nothing pushed. Next substantial feature: page-specific notes and consolidated
+learning log. Completion timing still requires an explicit decision; full
+PostgreSQL/browser and human UX/accessibility acceptance remain outstanding.
+
 ## Future entry format
 
 At subsequent checkpoints, append:
