@@ -1312,6 +1312,36 @@ authentication HTTP cases and related acceptance documentation. Full Release
 validation: **408 passed, none skipped**, PostgreSQL enabled. Whitespace checks
 passed. No push performed. Continuing with failed/cancelled sign-in recovery.
 
+### Checkpoint 33 (in progress): cancelled/failed sign-in recovery
+
+User requested "checkpoint and continue". Saved slice 32 as `0be51bcb`
+(`Verify non-development authentication boundaries`); no push performed.
+Added explicit OIDC access-denied/remote-failure handling and a no-store local
+recovery page offering retry/home links. Events log failure category/request trace,
+not raw provider error descriptions or tokens. No exception is treated as a
+successful sign-in, and no caller-supplied return URL is used.
+
+Eight real-middleware HTTP cases cover cancellation, provider errors, invalid
+state and absent correlation cookies in Production/Staging, with static discovery
+metadata. They verify recovery rendering, no reflected protocol/return-URL data,
+no session cookie, continued anonymous protected access and a fresh retry state.
+Targeted authentication tests: **14 passed**. Full Release with PostgreSQL:
+**416 passed, none skipped**, including twenty PostgreSQL cases. Editor diagnostics
+passed. Restarted local app; browser confirmed recovery heading and retry/home
+destinations. This browser check directly visited the recovery page, not a real
+provider callback; the shared learner session and saved data were not changed.
+
+Updated A02 to Partial: real provider exchange/failures, missing-claim handling
+and expired-session acceptance remain. No security/accessibility sign-off claimed.
+This slice remains uncommitted.
+
+#### Checkpoint commit for slice 33
+
+User requested "checkpoint continue". Saving cancelled/failed sign-in recovery
+and eight callback cases. Full Release validation: **416 passed, none skipped**,
+PostgreSQL enabled. Whitespace checks passed. No push performed. Continuing with
+expired-session recovery and persisted learner data.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

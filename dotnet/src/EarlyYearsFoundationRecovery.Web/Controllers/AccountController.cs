@@ -32,6 +32,11 @@ public sealed class AccountController(
     }
 
     [AllowAnonymous]
+    [HttpGet("sign-in-problem")]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult SignInProblem() => View();
+
+    [AllowAnonymous]
     [HttpPost("development-sign-in")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DevelopmentSignIn(CancellationToken cancellationToken)

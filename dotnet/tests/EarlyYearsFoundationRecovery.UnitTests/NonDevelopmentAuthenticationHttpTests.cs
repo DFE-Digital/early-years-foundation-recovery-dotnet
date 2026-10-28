@@ -89,6 +89,58 @@ public sealed class NonDevelopmentAuthenticationHttpTests
         AssertNoSessionCookie(get);
     }
 
+    [Theory]
+    [InlineData("Production", "access_denied")]
+    [InlineData("Production", "server_error")]
+    [InlineData("Production", "invalid_state")]
+    [InlineData("Production", "missing_correlation")]
+    [InlineData("Staging", "access_denied")]
+    [InlineData("Staging", "server_error")]
+    [InlineData("Staging", "invalid_state")]
+    [InlineData("Staging", "missing_correlation")]
+    public async Task FailedCallbackOffersLocalRecoveryWithoutSigningIn(string environment, string failure)
+    {
+        using var factory = CreateFactory(environment);
+        using var client = CreateClient(factory);
+        using var challenge = await client.GetAsync("/account/sign-in");
+        Assert.Equal(HttpStatusCode.Redirect, challenge.StatusCode);
+        var state = QueryHelpers.ParseQuery(Assert.IsType<Uri>(challenge.Headers.Location).Query)["state"].ToString();
+        using var freshClient = CreateClient(factory);
+        var callbackClient = failure == "missing_correlation" ? freshClient : client;
+        const string privateDescription = "provider-private-description";
+        var callback = QueryHelpers.AddQueryString("/signin-gov-one", new Dictionary<string, string?>
+        {
+            ["state"] = failure == "invalid_state" ? "tampered-state" : state,
+            ["error"] = failure == "access_denied" ? "access_denied" : "server_error",
+            ["error_description"] = privateDescription
+        });
+
+        using var response = await callbackClient.GetAsync(callback);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/account/sign-in-problem", response.Headers.Location?.OriginalString);
+        AssertNoSessionCookie(response);
+        using var recovery = await callbackClient.GetAsync("/account/sign-in-problem?returnUrl=https://untrusted.example");
+        Assert.Equal(HttpStatusCode.OK, recovery.StatusCode);
+        Assert.True(recovery.Headers.CacheControl?.NoStore);
+        var html = await recovery.Content.ReadAsStringAsync();
+        Assert.Contains("<h1>You have not signed in</h1>", html);
+        Assert.Contains("href=\"/account/sign-in\"", html);
+        Assert.Contains("Return to the training homepage", html);
+        Assert.DoesNotContain(privateDescription, html);
+        Assert.DoesNotContain(state, html);
+        Assert.DoesNotContain("untrusted.example", html);
+        AssertNoSessionCookie(recovery);
+        using var protectedPage = await callbackClient.GetAsync("/account");
+        Assert.Equal(HttpStatusCode.Redirect, protectedPage.StatusCode);
+        Assert.Equal("identity.example.test", protectedPage.Headers.Location?.Host);
+        using var retry = await callbackClient.GetAsync("/account/sign-in");
+        Assert.Equal(HttpStatusCode.Redirect, retry.StatusCode);
+        var retryState = QueryHelpers.ParseQuery(Assert.IsType<Uri>(retry.Headers.Location).Query)["state"].ToString();
+        Assert.False(string.IsNullOrWhiteSpace(retryState));
+        Assert.NotEqual(state, retryState);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(string environment) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {

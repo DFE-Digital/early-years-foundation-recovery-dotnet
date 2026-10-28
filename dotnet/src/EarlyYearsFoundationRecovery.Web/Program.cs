@@ -128,6 +128,26 @@ if (hasGovOneConfiguration)
 
             options.Events = new OpenIdConnectEvents
             {
+                OnAccessDenied = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("GovOneAuthentication");
+                    logger.LogInformation("One Login sign-in was declined. Trace {TraceIdentifier}",
+                        context.HttpContext.TraceIdentifier);
+                    context.HandleResponse();
+                    context.Response.Redirect("/account/sign-in-problem");
+                    return Task.CompletedTask;
+                },
+                OnRemoteFailure = context =>
+                {
+                    var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("GovOneAuthentication");
+                    logger.LogWarning("One Login sign-in failed ({FailureType}). Trace {TraceIdentifier}",
+                        context.Failure?.GetType().Name, context.HttpContext.TraceIdentifier);
+                    context.HandleResponse();
+                    context.Response.Redirect("/account/sign-in-problem");
+                    return Task.CompletedTask;
+                },
                 OnAuthorizationCodeReceived = async context =>
                 {
                     var configuration = await context.Options.ConfigurationManager!

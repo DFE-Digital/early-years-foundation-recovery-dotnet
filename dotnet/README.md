@@ -182,6 +182,14 @@ and anonymous account access use the provider challenge, with code flow, PKCE,
 state, nonce and expected callback/scopes checked. These tests use static OIDC
 discovery metadata, not a real One Login exchange or logout, and require no
 database, CMS, private key or provider credentials.
+Cancelled or failed One Login callbacks redirect to `/account/sign-in-problem`,
+a no-store page offering an explicit retry and homepage link without echoing
+provider error details or accepting a return URL. Authentication events log
+failure categories with a request trace. Eight further HTTP cases cover provider
+cancellation/errors, invalid state and missing correlation cookies in Production
+and Staging, including anonymous access after failure and a fresh retry challenge.
+These are simulated callback tests, not evidence of a real One Login exchange,
+expired-session recovery or complete authentication acceptance.
 
 The shared registration/account name form has a focused linked error summary,
 an Error-prefixed page title and field-associated error text. HTTP tests cover
