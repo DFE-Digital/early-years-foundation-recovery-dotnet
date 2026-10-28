@@ -1280,6 +1280,38 @@ No valid shared profile edit submitted. Health and database cleanup checks passe
 Updated README/acceptance. This slice is uncommitted; nothing pushed. This is
 targeted browser evidence, not assistive-technology/accessibility sign-off.
 
+### Checkpoint 32 (in progress): non-development authentication boundary
+
+User requested "continue" after the status review recommended a bounded
+acceptance pass rather than further form-by-form polishing. Added six HTTP cases
+using real middleware/controllers in Production and Staging. A valid anti-forgery
+Development-sign-in POST returns 404 without a session cookie; missing-token POST
+returns 400 and GET returns 405. Subsequent protected account access remains
+anonymous and challenges at the provider. Normal sign-in checks the OIDC code
+challenge, PKCE S256, state, nonce, scopes and callback.
+
+Test-host settings must be supplied before minimal-host startup validation.
+Static OIDC configuration is installed through ConfigurationManager so challenge
+tests do not fetch remote discovery metadata. An initial configuration-only
+override left the default discovery manager active; corrected the test setup.
+No application authentication behaviour was changed. No real credentials,
+private key, database or CMS access is needed for these six cases.
+
+Targeted cases: **6 passed**. Full Release suite with PostgreSQL enabled:
+**408 passed, none skipped**, including twenty PostgreSQL cases. Editor diagnostics
+passed. Updated A03 to Implemented for this bounded requirement; A01/A02 and
+security sign-off remain outstanding. Real One Login exchange, callback and
+logout are not verified by static challenge tests. Final repository inspection
+found slice 31 had been committed separately as `69fac47e` during this work.
+Slice 32 remains uncommitted. No commit or push was performed by this slice.
+
+#### Checkpoint commit for slice 32
+
+User requested "checkpoint and continue". Saving the six non-development
+authentication HTTP cases and related acceptance documentation. Full Release
+validation: **408 passed, none skipped**, PostgreSQL enabled. Whitespace checks
+passed. No push performed. Continuing with failed/cancelled sign-in recovery.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

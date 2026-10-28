@@ -175,6 +175,14 @@ all-or-nothing validation of dependent answers, changing to a no-role setting,
 location/authority validation, custom-role editing and independent email/research
 preferences. Fresh contexts verify unchanged answers after rejected forms and
 saved values after successful changes.
+Six non-development authentication HTTP cases exercise Production and Staging:
+Development sign-in rejects even a valid anti-forgery POST without issuing a
+session cookie; missing-token POST and GET are also rejected. Normal sign-in
+and anonymous account access use the provider challenge, with code flow, PKCE,
+state, nonce and expected callback/scopes checked. These tests use static OIDC
+discovery metadata, not a real One Login exchange or logout, and require no
+database, CMS, private key or provider credentials.
+
 The shared registration/account name form has a focused linked error summary,
 an Error-prefixed page title and field-associated error text. HTTP tests cover
 both routes and ensure rejected edits leave the saved name unchanged.
