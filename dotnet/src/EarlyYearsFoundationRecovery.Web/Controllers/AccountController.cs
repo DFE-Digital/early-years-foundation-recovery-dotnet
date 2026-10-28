@@ -294,7 +294,8 @@ public sealed class AccountController(
         IReadOnlyList<RegistrationChoice> roles,
         IReadOnlyList<RegistrationChoice> experiences)
     {
-        if (!roles.Any(role => role.Name == roleType))
+        if (ModelState[nameof(AccountRoleModel.RoleType)]?.Errors.Count is not > 0 &&
+            !roles.Any(role => role.Name == roleType))
         {
             ModelState.AddModelError(nameof(AccountRoleModel.RoleType), "Select a valid role.");
         }
@@ -302,7 +303,8 @@ public sealed class AccountController(
         {
             ModelState.AddModelError(nameof(AccountRoleModel.RoleTypeOther), "Describe your role.");
         }
-        if (!experiences.Any(item => item.Id == experience))
+        if (ModelState[nameof(AccountRoleModel.EarlyYearsExperience)]?.Errors.Count is not > 0 &&
+            !experiences.Any(item => item.Id == experience))
         {
             ModelState.AddModelError(nameof(AccountRoleModel.EarlyYearsExperience), "Select a valid experience option.");
         }

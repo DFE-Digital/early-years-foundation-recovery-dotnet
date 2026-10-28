@@ -1261,6 +1261,25 @@ Whitespace checks passed. Includes preference/location accessibility changes,
 HTTP regressions and targeted keyboard browser evidence; saved learner details
 unchanged. Nothing pushed. Local app remains running.
 
+### Checkpoint 31 (in progress): role/experience error recovery
+
+User requested "continue" after checkpoint `e1fdb9b5`. Added an Error-prefixed
+title, labelled/focused linked summary in visible field order, and invalid/error
+associations to the account role/experience form. The custom-role input retains
+its hint alongside errors. Added friendly required-field messages; reference
+validation no longer adds a second error when that field already failed model
+validation. Valid-save and atomic persistence rules remain unchanged.
+
+Added PostgreSQL HTTP coverage of empty/invalid choices, missing custom-role
+description, ordered links, error associations, unchanged saved answers and
+normal GET state. Targeted tests passed; final full Release suite with PostgreSQL
+enabled: **402 passed, none skipped**, including twenty integration cases.
+Restarted the local app and verified browser summary focus, Tab/Enter navigation
+into the role select and unchanged saved role/experience after rejected edits.
+No valid shared profile edit submitted. Health and database cleanup checks passed.
+Updated README/acceptance. This slice is uncommitted; nothing pushed. This is
+targeted browser evidence, not assistive-technology/accessibility sign-off.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

@@ -1,8 +1,8 @@
 # Core rewrite acceptance inventory
 
-Checkpoint 30 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
-journey acceptance after committed slice 28 (`dde7cd82`).
-The latest local Release suite passed **401 tests**, including nineteen PostgreSQL
+Checkpoint 31 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
+journey acceptance after committed slices 29-30 (`e1fdb9b5`).
+The latest local Release suite passed **402 tests**, including twenty PostgreSQL
 integration cases with none skipped. See [the AI log](AI-LOG.md) for
 per-slice evidence and checkpoint history.
 This inventory is not a production-readiness declaration or evidence that CI ran.
@@ -198,6 +198,13 @@ preserve saved data and normal GETs omit invalid state. The integrated browser
 confirmed summary focus and Tab/Enter navigation into the authority select;
 returning to the account confirmed saved location unchanged. Other forms and
 assistive-technology combinations still need review.
+The account role/experience form now has focused linked errors in visible field
+order, friendly missing-selection messages and custom-description hint/error
+associations. HTTP coverage checks missing/invalid choices, missing custom text,
+unchanged saved answers and normal GET state. The integrated browser confirmed
+summary focus and Tab/Enter navigation into the role select; returning to My
+account confirmed role/experience unchanged. This is targeted evidence, not
+full accessibility sign-off.
 
 - Preserve passing-assessment requirements while deciding completion timing.
   Rails behaviour and the current stricter .NET guard must be reconciled explicitly.

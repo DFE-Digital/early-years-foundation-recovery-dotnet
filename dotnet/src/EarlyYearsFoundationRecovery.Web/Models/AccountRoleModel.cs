@@ -5,14 +5,17 @@ namespace EarlyYearsFoundationRecovery.Web.Models;
 
 public sealed class AccountRoleModel
 {
-    [Required]
+    [Display(Name = "Role")]
+    [Required(ErrorMessage = "Select a role.")]
     [StringLength(120)]
     public string RoleType { get; set; } = string.Empty;
 
+    [Display(Name = "Role description")]
     [StringLength(200)]
     public string? RoleTypeOther { get; set; }
 
-    [Required]
+    [Display(Name = "Early years experience")]
+    [Required(ErrorMessage = "Select your early years experience.")]
     [StringLength(100)]
     public string EarlyYearsExperience { get; set; } = string.Empty;
 

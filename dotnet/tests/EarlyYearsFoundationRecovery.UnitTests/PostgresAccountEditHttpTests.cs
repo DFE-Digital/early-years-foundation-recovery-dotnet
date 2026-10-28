@@ -6,6 +6,55 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed partial class PostgresPersistenceTests
 {
     [PostgresFact]
+    public async Task HttpRoleErrorsLinkToVisibleFieldsInOrderWithoutSaving()
+    {
+        await SeedEditableAccountAsync();
+        using var factory = CreateHttpFactory();
+        using var client = CreateRegistrationClient(factory);
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        using (var invalid = await SubmitFormAsync(client, "/account/role", "/account/role",
+            ("RoleType", ""), ("EarlyYearsExperience", "")))
+        {
+            Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+            var html = await invalid.Content.ReadAsStringAsync();
+            Assert.Contains("<title>Error: Change role and experience", html);
+            Assert.Contains("tabindex=\"-1\" autofocus", html);
+            Assert.Contains("href=\"#RoleType\"", html);
+            Assert.Contains("href=\"#EarlyYearsExperience\"", html);
+            Assert.True(html.IndexOf("href=\"#RoleType\"", StringComparison.Ordinal) <
+                        html.IndexOf("href=\"#EarlyYearsExperience\"", StringComparison.Ordinal));
+            Assert.Contains("Select a role.", html);
+            Assert.Contains("Select your early years experience.", html);
+            Assert.DoesNotContain("Select a valid role.", html);
+            Assert.DoesNotContain("Select a valid experience option.", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"role-error\"", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"experience-error\"", html);
+        }
+        using (var invalid = await SubmitFormAsync(client, "/account/role", "/account/role",
+            ("RoleType", "other"), ("RoleTypeOther", ""), ("EarlyYearsExperience", "0-2")))
+        {
+            Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+            var html = await invalid.Content.ReadAsStringAsync();
+            Assert.Contains("href=\"#RoleTypeOther\"", html);
+            Assert.Contains("Describe your role.", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"role-hint role-description-error\"", html);
+            Assert.Contains("id=\"role-description-error\"", html);
+        }
+        using (var invalid = await SubmitFormAsync(client, "/account/role", "/account/role",
+            ("RoleType", "unknown"), ("EarlyYearsExperience", "unknown")))
+        {
+            Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+            var html = await invalid.Content.ReadAsStringAsync();
+            Assert.Contains("Select a valid role.", html);
+            Assert.Contains("Select a valid experience option.", html);
+        }
+        await AssertOriginalEditableAccountAsync();
+        var valid = await client.GetStringAsync("/account/role");
+        Assert.DoesNotContain("aria-invalid=\"true\"", valid);
+        Assert.DoesNotContain("<title>Error:", valid);
+    }
+
+    [PostgresFact]
     public async Task HttpInvalidLocationHasLinkedErrorsAndRetainsHintWithoutSaving()
     {
         await SeedEditableAccountAsync();
