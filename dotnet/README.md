@@ -124,6 +124,63 @@ dotnet run --project dotnet/src/EarlyYearsFoundationRecovery.Web
 
 In Development, visit `/account/sign-in` and use the local test-user sign-in. Outside Development, configure Gov.UK One Login with `Authentication__GovOne__Authority`, `Authentication__GovOne__ClientId`, and `Authentication__GovOne__PrivateKeyPath`. Set `Contentful__Space` and either `Contentful__DeliveryToken` or (when `Contentful__Preview=true`) `Contentful__PreviewToken` to load real training and registration content.
 
+### Testing real One Login locally
+
+The VS Code development task uses the existing Homebrew PostgreSQL database on
+port **5433**, leaving the Rails container's database on **5432**. If needed, start
+the existing Homebrew service with `brew services start postgresql@17`; its local
+cluster is configured for 5433. Keep `Port=5433` in local app/test connections.
+Do not point the .NET app at the Rails database or recreate the learner database
+to resolve a port conflict.
+
+Use an approved One Login integration/test client, not production credentials.
+Ask the team's One Login administrator for its authority/issuer URL, client ID,
+and registration of the public key matching your locally held RSA private key.
+Do not share or commit the private key. The current client assertion implementation
+signs with RS256; confirm this matches the test client's registered configuration.
+
+The default HTTPS launch profile uses `https://localhost:7197`. Register the exact
+sign-in callback `https://localhost:7197/signin-gov-one` with the test client.
+Confirm whether that environment accepts localhost redirects; if not, use a
+team-approved reachable HTTPS development hostname and register its exact callback
+instead. The app builds redirect URLs from the incoming request's scheme/host;
+an approved reverse proxy must preserve these correctly. Do not assume a hostname
+registration or tunnel will work without the provider/team's approval.
+
+Store configuration in the web project's local user-secrets:
+
+```sh
+cd dotnet/src/EarlyYearsFoundationRecovery.Web
+dotnet user-secrets set "Authentication:GovOne:Authority" "YOUR_TEST_AUTHORITY"
+dotnet user-secrets set "Authentication:GovOne:ClientId" "YOUR_TEST_CLIENT_ID"
+dotnet user-secrets set "Authentication:GovOne:PrivateKeyPath" "/absolute/path/outside/repository/test-private-key.pem"
+```
+
+Trust the local HTTPS development certificate if necessary (`dotnet dev-certs
+https --trust`), then restart the existing HTTPS development task with its normal
+database connection. You can keep Development/sample content; real Contentful is
+not required to test authentication.
+
+In a private browser window, visit `https://localhost:7197/account/sign-in` and
+select **Sign in with GOV.UK One Login**, not the local test-user button. The One
+Login option appears only when the OIDC scheme is configured. It starts the real
+provider flow at `/account/one-login-sign-in`; `/signin-gov-one` is the middleware
+callback, not a page to visit manually. A new provider subject creates a separate
+learner, so do not expect the Development test user's saved progress to transfer.
+
+Check successful return to account/registration, cancellation, retry and later
+sign-in to the same learner. `/account/sign-in-problem` is the recovery page for
+failed callbacks. Do not share callback URLs containing codes/state, tokens or
+private keys when reporting failures.
+
+Development sign-out currently clears only the local cookie, even when testing
+real One Login. Provider logout needs a separately configured non-Development
+test run (including Contentful configuration); its default callback is
+`https://localhost:7197/signout-callback-oidc`, which must be allowed by the client.
+The current final redirect starts sign-in again, as noted in the acceptance
+inventory. Successful simulated challenge/logout tests do not establish that
+the real provider accepts the client configuration or token exchange.
+
 ### PostgreSQL integration tests
 
 Set `EYFR_TEST_POSTGRES` to a PostgreSQL connection string for a test-server role
@@ -134,11 +191,11 @@ administrative connection; tests never apply migrations to it. Do not use
 production credentials or servers.
 
 ```sh
-EYFR_TEST_POSTGRES='Host=localhost;Database=postgres;Username=your_local_role' \
+EYFR_TEST_POSTGRES='Host=localhost;Port=5433;Database=postgres;Username=your_local_role' \
   dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --configuration Release
 ```
 
-Without this variable the twenty-two PostgreSQL cases are explicitly reported as
+Without this variable the twenty-five PostgreSQL cases are explicitly reported as
 skipped; other tests run normally. CI configures a PostgreSQL 17 service and
 enables these tests. They cover upgrading existing notes, fresh-context
 reads/edits, learner isolation, confidence answers/lifecycle, account-closure
@@ -197,6 +254,21 @@ Development reauthentication restores the same learner, notes and incomplete
 assessment answers without changing saved profile data. Sliding renewal is checked
 after half the lifetime, with the original cookie still rejected after its expiry.
 These tests do not exercise provider-session expiry or real One Login reauthentication.
+Logout HTTP coverage verifies GET/missing-token requests cannot sign out an active
+Development session, a valid POST deletes the cookie, and subsequent sign-in keeps
+the saved profile and notes. A Production case bootstraps a protected existing
+session with the application's ticket formatter, retaining real cookie validation
+and database account lookup. Static provider metadata verifies end-session routing,
+local cookie deletion and the logout callback, not provider acceptance.
+The current provider callback returns to sign-in and therefore starts another
+provider challenge; the intended signed-out landing still needs agreement.
+An additional host-restart HTTP case disposes the first web host completely,
+then starts another against the same isolated database and a persisted,
+test-specific data-protection key directory. The original session cookie still
+works, notes and selected answers reappear, and the same interrupted assessment
+can be completed without duplicating the learner or attempt. Temporary keys are
+deleted after both hosts stop. This is sequential in-process host reconstruction,
+not an OS-process/database restart or proof of deployment key-storage configuration.
 
 The shared registration/account name form has a focused linked error summary,
 an Error-prefixed page title and field-associated error text. HTTP tests cover

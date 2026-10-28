@@ -32,6 +32,20 @@ public sealed class AccountController(
     }
 
     [AllowAnonymous]
+    [HttpGet("one-login-sign-in")]
+    public async Task<IActionResult> OneLoginSignIn([FromServices] IAuthenticationSchemeProvider schemes)
+    {
+        if (await schemes.GetSchemeAsync(OpenIdConnectDefaults.AuthenticationScheme) is null)
+        {
+            return NotFound();
+        }
+
+        return Challenge(
+            new AuthenticationProperties { RedirectUri = Url.Action(nameof(Index)) },
+            OpenIdConnectDefaults.AuthenticationScheme);
+    }
+
+    [AllowAnonymous]
     [HttpGet("sign-in-problem")]
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult SignInProblem() => View();

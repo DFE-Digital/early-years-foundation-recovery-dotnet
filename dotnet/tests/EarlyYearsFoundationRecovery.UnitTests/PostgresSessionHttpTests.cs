@@ -1,16 +1,138 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed partial class PostgresPersistenceTests
 {
+    [PostgresFact]
+    public async Task HttpSignOutRequiresProtectedPostAndClearsLocalSessionWithoutDeletingLearning()
+    {
+        await SeedEditableAccountAsync();
+        await using (var db = CreateContext())
+        {
+            await Journey(db).SavePageNoteAsync(await db.UserAccounts.SingleAsync(),
+                Module.Name, "first", "Keep after sign-out", CancellationToken.None);
+        }
+        using var factory = CreateHttpFactory();
+        using var client = CreateRegistrationClient(factory);
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        using (var get = await client.GetAsync("/account/sign-out"))
+        {
+            Assert.Equal(HttpStatusCode.MethodNotAllowed, get.StatusCode);
+            AssertNoSessionRenewal(get);
+        }
+        using (var missingToken = await client.PostAsync("/account/sign-out",
+            new FormUrlEncodedContent(new Dictionary<string, string>())))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, missingToken.StatusCode);
+            AssertNoSessionRenewal(missingToken);
+        }
+        Assert.Contains("Alex Example", await client.GetStringAsync("/account"));
+        using (var signOut = await SubmitFormAsync(client, "/account", "/account/sign-out"))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, signOut.StatusCode);
+            Assert.Equal("/account/sign-in", signOut.Headers.Location?.OriginalString);
+            Assert.Equal("__Host-EYFR.Session=", GetSessionCookie(signOut));
+        }
+        using (var protectedPage = await client.GetAsync("/account"))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, protectedPage.StatusCode);
+            Assert.StartsWith("/account/sign-in", protectedPage.Headers.Location?.PathAndQuery);
+        }
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        await AssertOriginalEditableAccountAsync();
+        await using (var db = CreateContext())
+        {
+            Assert.Equal("Keep after sign-out", (await db.LearningNotes.SingleAsync()).Content);
+        }
+    }
+
+    [PostgresFact]
+    public async Task HttpProductionSignOutClearsCookieAndUsesProviderEndSession()
+    {
+        await SeedEditableAccountAsync();
+        long accountId;
+        await using (var db = CreateContext())
+        {
+            accountId = (await db.UserAccounts.SingleAsync()).Id;
+        }
+        using var factory = CreateHttpFactory().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("ConnectionStrings:Application", _testConnection);
+            builder.UseSetting("Contentful:Space", "test-space");
+            builder.UseSetting("Contentful:DeliveryToken", "test-token");
+            builder.UseSetting("Contentful:Preview", "false");
+            builder.UseSetting("Authentication:GovOne:Authority", "https://identity.example.test");
+            builder.UseSetting("Authentication:GovOne:ClientId", "integration-test-client");
+            builder.UseSetting("Authentication:GovOne:PrivateKeyPath", "unused-test-key.pem");
+            builder.ConfigureTestServices(services =>
+                services.PostConfigure<OpenIdConnectOptions>(OpenIdConnectDefaults.AuthenticationScheme,
+                    options => options.ConfigurationManager =
+                        new StaticConfigurationManager<OpenIdConnectConfiguration>(
+                            new OpenIdConnectConfiguration
+                            {
+                                Issuer = "https://identity.example.test",
+                                AuthorizationEndpoint = "https://identity.example.test/authorize",
+                                EndSessionEndpoint = "https://identity.example.test/logout"
+                            })));
+        });
+        using var client = CreateRegistrationClient(factory);
+        var options = factory.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
+            .Get(CookieAuthenticationDefaults.AuthenticationScheme);
+        var identity = new ClaimsIdentity(
+        [
+            new Claim("sub", "local-development-user"),
+            new Claim("eyfr_account_id", accountId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+        ], CookieAuthenticationDefaults.AuthenticationScheme);
+        // Bootstrap an existing session without enabling Development sign-in or mocking authentication.
+        var cookie = options.TicketDataFormat.Protect(new AuthenticationTicket(
+            new ClaimsPrincipal(identity),
+            new AuthenticationProperties
+            {
+                IssuedUtc = DateTimeOffset.UtcNow,
+                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1)
+            }, CookieAuthenticationDefaults.AuthenticationScheme));
+        client.DefaultRequestHeaders.Add("Cookie", "__Host-EYFR.Session=" + cookie);
+        using (var missingToken = await client.PostAsync("/account/sign-out",
+            new FormUrlEncodedContent(new Dictionary<string, string>())))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, missingToken.StatusCode);
+            AssertNoSessionRenewal(missingToken);
+        }
+        using var signOut = await SubmitFormAsync(client, "/account", "/account/sign-out");
+        Assert.Equal(HttpStatusCode.Redirect, signOut.StatusCode);
+        Assert.Equal("__Host-EYFR.Session=", GetSessionCookie(signOut));
+        var location = Assert.IsType<Uri>(signOut.Headers.Location);
+        Assert.Equal("https://identity.example.test/logout", location.GetLeftPart(UriPartial.Path));
+        var query = QueryHelpers.ParseQuery(location.Query);
+        Assert.Equal("https://localhost/signout-callback-oidc", query["post_logout_redirect_uri"].ToString());
+        Assert.False(string.IsNullOrWhiteSpace(query["state"]));
+        client.DefaultRequestHeaders.Remove("Cookie");
+        using var callback = await client.GetAsync(QueryHelpers.AddQueryString(
+            "/signout-callback-oidc", "state", query["state"].ToString()));
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Equal("https://localhost/account/sign-in", callback.Headers.Location?.OriginalString);
+        using var protectedPage = await client.GetAsync("/account");
+        Assert.Equal(HttpStatusCode.Redirect, protectedPage.StatusCode);
+        Assert.Equal("identity.example.test", protectedPage.Headers.Location?.Host);
+        await AssertOriginalEditableAccountAsync();
+    }
+
     [PostgresFact]
     public async Task HttpExpiredSessionBlocksReadsAndWritesAndSignInRestoresSavedLearning()
     {

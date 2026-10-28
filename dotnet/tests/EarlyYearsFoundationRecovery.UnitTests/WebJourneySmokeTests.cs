@@ -42,6 +42,14 @@ public sealed class WebJourneySmokeTests : IClassFixture<WebApplicationFactory<P
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("local test user", html);
         Assert.Contains("development-sign-in", html);
+        Assert.DoesNotContain("href=\"/account/one-login-sign-in\"", html);
+    }
+
+    [Fact]
+    public async Task UnconfiguredOneLoginRouteIsUnavailable()
+    {
+        using var response = await _client.GetAsync("/account/one-login-sign-in");
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Theory]

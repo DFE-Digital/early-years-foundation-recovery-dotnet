@@ -1,11 +1,25 @@
 # Core rewrite acceptance inventory
 
-Checkpoint 34 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
-journey acceptance after committed slice 33 (`39a511ac`).
-The latest local Release suite passed **418 tests**, including twenty-two PostgreSQL
+Checkpoint 38 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
+journey acceptance after committed slice 34 (`490df305`).
+The latest local Release suite passed **423 tests**, including twenty-five PostgreSQL
 integration cases with none skipped. See [the AI log](AI-LOG.md) for
 per-slice evidence and checkpoint history.
 This inventory is not a production-readiness declaration or evidence that CI ran.
+
+Local One Login testing now has an explicit configured-provider option in
+Development; see [setup instructions](README.md#testing-real-one-login-locally).
+The follow-up authentication/smoke run passed 21 tests. The database port conflict
+with the Rails container has been resolved by using the existing Homebrew cluster
+on port 5433; the full suite now passes 423 tests with none skipped.
+
+[Host-restart HTTP acceptance](tests/EarlyYearsFoundationRecovery.UnitTests/PostgresHostRestartHttpTests.cs)
+disposes one host before creating a second with the same isolated database and
+persisted test-specific data-protection keys. It verifies the original cookie,
+profile, notes and interrupted assessment survive, and completing the remaining
+question updates the same attempt without completing the module prematurely.
+This strengthens Q02/N03 but does not cover OS-process/database restarts,
+concurrent writes, failures or deployment key-storage configuration.
 
 ## Scope and evidence
 
@@ -64,7 +78,7 @@ Rails references:
 
 | ID | Acceptance case | Status | Current evidence and remaining work |
 |---|---|---|---|
-| A01 | Sign in with One Login; identify the learner; sign out locally and at the provider | Unverified | OIDC/PKCE and private-key JWT are wired in [startup](src/EarlyYearsFoundationRecovery.Web/Program.cs); [assertion tests](tests/EarlyYearsFoundationRecovery.UnitTests/GovOneClientAssertionTests.cs) cover the JWT, not a real provider exchange. Exercise integration-environment sign-in, callback, user info and logout. |
+| A01 | Sign in with One Login; identify the learner; sign out locally and at the provider | Partial | OIDC/PKCE and private-key JWT are wired in [startup](src/EarlyYearsFoundationRecovery.Web/Program.cs); [assertion tests](tests/EarlyYearsFoundationRecovery.UnitTests/GovOneClientAssertionTests.cs) cover the JWT, not a real provider exchange. [Session HTTP tests](tests/EarlyYearsFoundationRecovery.UnitTests/PostgresSessionHttpTests.cs) verify protected POST logout, local cookie deletion, unchanged persisted profile/notes and Production end-session redirect/callback using static provider metadata and a test-issued protected cookie. Real cookie validation and PostgreSQL account lookup remain active. Current provider callback returns to sign-in, which starts a new challenge; agree the intended signed-out landing before approval. Exercise real integration-environment sign-in, callback, user info and provider logout; simulated routing does not prove provider acceptance. |
 | A02 | Handle cancelled/failed sign-in and expired sessions with a usable recovery journey | Partial | Cancelled/failed OIDC callbacks now redirect to a no-store local recovery page with explicit retry/home links rather than a generic exception. Authentication events log a failure category and request trace without adding raw provider descriptions, claims or tokens. [HTTP tests](tests/EarlyYearsFoundationRecovery.UnitTests/NonDevelopmentAuthenticationHttpTests.cs) in Production/Staging cover cancellation, provider errors, invalid state and missing correlation cookies, verify no session cookie/authenticated access, no reflected provider details or return URLs, and a fresh challenge on retry. [Session HTTP tests](tests/EarlyYearsFoundationRecovery.UnitTests/PostgresSessionHttpTests.cs) verify the real one-hour ticket lifetime, expired-cookie read/write challenges, unchanged profile/notes/incomplete assessment after Development reauthentication, and sliding renewal without reviving the original cookie. Real provider failures, missing-claim token exchanges, provider-session expiry and browser callback acceptance remain outstanding. |
 | A03 | Development sign-in is unavailable outside Development | Implemented | [Non-development HTTP tests](tests/EarlyYearsFoundationRecovery.UnitTests/NonDevelopmentAuthenticationHttpTests.cs) run the real middleware/controller pipeline in Production and Staging. A valid anti-forgery POST returns 404 without a session cookie; missing-token POST returns 400 and GET returns 405. A subsequent account request remains anonymous and challenges at the provider. Sign-in redirects to an OIDC code-flow challenge with PKCE, state, nonce, expected scopes and callback rather than rendering the Development page. Static test discovery metadata avoids live provider dependencies; real One Login exchange/logout remain unverified under A01. |
 | A04 | Complete standard registration, including local authority, role, experience and explicit preferences | Partial | [RegistrationController](src/EarlyYearsFoundationRecovery.Web/Controllers/RegistrationController.cs), [domain tests](tests/EarlyYearsFoundationRecovery.UnitTests/UserAccountTests.cs) and [reference-data tests](tests/EarlyYearsFoundationRecovery.UnitTests/RegistrationReferenceDataTests.cs) exist. Controller journey tests submit each step through completion for standard and childminder settings, with reference validation and saved authority prefill. The [summary](src/EarlyYearsFoundationRecovery.Web/Views/Registration/CheckAnswers.cshtml) shows friendly labels, Yes/No preferences, explicit missing answers and labelled review links; rejected completion retains metadata and validation errors. Controller/actual-Razor and isolated HTTP coverage verify summary/review behaviour; live HTTP checks cover selected forms without changing learner data. Full Rails-equivalent browser/PostgreSQL acceptance remains outstanding. |

@@ -14,6 +14,25 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 
 public sealed class NonDevelopmentAuthenticationHttpTests
 {
+    [Fact]
+    public async Task ConfiguredDevelopmentOffersExplicitOneLoginAlongsideLocalSignIn()
+    {
+        using var factory = CreateFactory("Development");
+        using var client = CreateClient(factory);
+        var html = await client.GetStringAsync("/account/sign-in");
+        Assert.Contains("href=\"/account/one-login-sign-in\"", html);
+        Assert.Contains("Sign in with GOV.UK One Login", html);
+        Assert.Contains("development-sign-in", html);
+        using var challenge = await client.GetAsync("/account/one-login-sign-in");
+        Assert.Equal(HttpStatusCode.Redirect, challenge.StatusCode);
+        var location = Assert.IsType<Uri>(challenge.Headers.Location);
+        Assert.Equal("https://identity.example.test/authorize", location.GetLeftPart(UriPartial.Path));
+        var query = QueryHelpers.ParseQuery(location.Query);
+        Assert.Equal("https://localhost/signin-gov-one", query["redirect_uri"].ToString());
+        Assert.Equal("S256", query["code_challenge_method"].ToString());
+        AssertNoSessionCookie(challenge);
+    }
+
     [Theory]
     [InlineData("Production")]
     [InlineData("Staging")]

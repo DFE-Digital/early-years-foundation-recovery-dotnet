@@ -12,7 +12,7 @@
 				"--launch-profile",
 				"https",
 				"--",
-				"--ConnectionStrings:Application=Host=localhost;Database=eyfr_dotnet;Username=${env:USER}"
+				"--ConnectionStrings:Application=Host=localhost;Port=5433;Database=eyfr_dotnet;Username=${env:USER}"
 			],
 			"isBackground": true,
 			"problemMatcher": []

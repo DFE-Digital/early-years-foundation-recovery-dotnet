@@ -1374,6 +1374,80 @@ skipped**, including twenty-two PostgreSQL cases. Whitespace checks passed.
 Application session configuration and shared learner data are unchanged.
 No push performed.
 
+### Checkpoint 35 (in progress): local and provider logout acceptance
+
+User requested "continue" after slice 34 checkpoint `490df305`.
+Added two PostgreSQL HTTP cases. Development logout rejects GET and missing-token
+POST without ending the active session; valid POST deletes the cookie and
+protected access challenges again. Reauthentication preserves profile/notes.
+Production uses a test-issued protected existing-session cookie, real validation/
+account lookup and static discovery metadata, without enabling Development sign-in.
+It rejects a missing-token POST, then verifies valid-POST cookie deletion,
+provider end-session URL/state/callback and protected access after logout.
+
+The existing provider callback returns to `/account/sign-in`, which immediately
+starts another provider challenge. Recorded this as an outstanding UX decision,
+not silently changed or treated as an approved logout landing. Real provider
+acceptance (including required logout parameters) remains unverified.
+
+Targeted cases: **2 passed**. Full Release with PostgreSQL enabled:
+**420 passed, none skipped**, including twenty-four PostgreSQL cases. Editor
+diagnostics passed. Test-only changes; no application behaviour, runtime settings
+or shared learner data changed. Updated A01 to Partial with explicit simulated/
+real-provider evidence boundary. This slice is uncommitted.
+
+### Checkpoint 36 (in progress): explicit local One Login testing
+
+User asked how to test One Login locally and challenged the web-search tool's
+authentication prompt. No further web-search tool used. Added an explicit
+configured-One-Login link alongside the Development test-user button and a
+challenge route that is unavailable when OIDC is not registered. Production's
+existing automatic sign-in challenge is unchanged. Documented local user-secrets,
+test-client/public-key registration, exact HTTPS callback, separate learner
+identity and Development's local-only logout limitation. Localhost acceptance
+must be confirmed with the team's provider administrator; not assumed.
+
+Targeted authentication/smoke tests: **21 passed**. Editor diagnostics passed.
+Full Release attempt: **398 passed, 24 failed**; every PostgreSQL case failed
+because localhost PostgreSQL now requires a password absent from the previous
+test connection. Unix socket connection also unavailable. No database settings,
+credentials or running app were changed to work around this environment change.
+Last all-green full suite remains 420 from slice 35, not 422. New code is built
+and targeted tests pass; database-enabled regression rerun remains blocked.
+This slice and prior logout acceptance changes remain uncommitted.
+
+### Checkpoint 37 (in progress): restore local database connectivity
+
+User reported the browser error on sign-out. Confirmed cookie validation failed
+because port 5432 was now served by the Rails `recovery_db` container rather than
+the stopped Homebrew PostgreSQL cluster. Did not change container credentials,
+stop Rails containers or recreate databases. Started the original Homebrew cluster
+on free localhost port 5433 and persisted that cluster's port via ALTER SYSTEM.
+Updated the VS Code app task and documented test connection to use 5433.
+
+Restarted app using the corrected task. Browser account page restored the existing
+learner, and actual Sign out/local Sign in both succeeded without profile changes.
+Full Release rerun with PostgreSQL on 5433: **422 passed, none skipped**, including
+twenty-four PostgreSQL cases. This resolves slice 36's blocked validation; no real
+One Login exchange is claimed. Shared browser returned to My account.
+
+### Checkpoint 38 (in progress): web-host reconstruction acceptance
+
+User requested "continue". Added an isolated PostgreSQL HTTP case saving notes
+and a multi-select assessment answer through real forms, then disposing the first
+web host/client before creating a second. A test-specific persisted data-protection
+key directory allows the original cookie to authenticate against the second host.
+The profile/note/selected answers remain, and submitting the remaining question
+completes the same assessment attempt without duplicate learner/attempt records
+or premature module completion. Start timestamp remains unchanged. Key files are
+cleaned after both hosts stop; shared learner/runtime data is untouched.
+
+Targeted case: **1 passed**. Full Release on PostgreSQL port 5433:
+**423 passed, none skipped**, including twenty-five PostgreSQL cases. Editor
+diagnostics passed. This is sequential in-process host reconstruction, not an
+OS-process or PostgreSQL restart and not deployment key-storage validation.
+Updated acceptance/README; earlier uncommitted changes retained.
+
 ## Future entry format
 
 At subsequent checkpoints, append:
