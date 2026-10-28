@@ -138,7 +138,7 @@ EYFR_TEST_POSTGRES='Host=localhost;Database=postgres;Username=your_local_role' \
   dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --configuration Release
 ```
 
-Without this variable the twenty PostgreSQL cases are explicitly reported as
+Without this variable the twenty-two PostgreSQL cases are explicitly reported as
 skipped; other tests run normally. CI configures a PostgreSQL 17 service and
 enables these tests. They cover upgrading existing notes, fresh-context
 reads/edits, learner isolation, confidence answers/lifecycle, account-closure
@@ -190,6 +190,13 @@ cancellation/errors, invalid state and missing correlation cookies in Production
 and Staging, including anonymous access after failure and a fresh retry challenge.
 These are simulated callback tests, not evidence of a real One Login exchange,
 expired-session recovery or complete authentication acceptance.
+Separate PostgreSQL-backed session tests control only the cookie middleware clock
+to verify the real one-hour ticket lifetime. Expired cookies cannot read protected
+account/training/log/certificate routes or save a previously opened name form.
+Development reauthentication restores the same learner, notes and incomplete
+assessment answers without changing saved profile data. Sliding renewal is checked
+after half the lifetime, with the original cookie still rejected after its expiry.
+These tests do not exercise provider-session expiry or real One Login reauthentication.
 
 The shared registration/account name form has a focused linked error summary,
 an Error-prefixed page title and field-associated error text. HTTP tests cover

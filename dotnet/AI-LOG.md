@@ -1342,6 +1342,38 @@ and eight callback cases. Full Release validation: **416 passed, none skipped**,
 PostgreSQL enabled. Whitespace checks passed. No push performed. Continuing with
 expired-session recovery and persisted learner data.
 
+### Checkpoint 34 (in progress): expired and sliding session acceptance
+
+User requested "checkpoint continue". Saved slice 33 as `39a511ac`
+(`Add cancelled and failed sign-in recovery`); no push performed.
+Added two isolated PostgreSQL HTTP tests with a test-only cookie TimeProvider.
+Application code, one-hour lifetime and sliding-expiration settings are unchanged.
+
+The expiry case inspects the actual issued ticket's one-hour lifetime, checks an
+active request before half-life does not renew, advances beyond expiry and verifies
+account/log/question/certificate reads and a previously opened name POST require
+sign-in. Reauthentication uses the same learner and restores saved notes and
+incomplete assessment answers; saved profile, start time and completion state
+remain intact. The renewal case advances beyond half-life, captures the renewed
+cookie, then proves the original cookie expires while the renewed session works.
+Avoided the exact half-life boundary because serialized ticket timestamps round
+to seconds; tests use 29/31 minutes to exercise either side deterministically.
+
+Targeted cases: **2 passed**. Final full Release suite with PostgreSQL enabled:
+**418 passed, none skipped**, including twenty-two PostgreSQL cases. Editor
+diagnostics passed. This uses real cookie middleware, MVC and EF stores, not a
+mock authentication handler. No shared learner data or runtime settings changed.
+Updated README/A02 evidence; real One Login reauthentication/provider-session
+expiry and browser acceptance remain outstanding. This slice is uncommitted.
+
+#### Checkpoint commit for slice 34
+
+User requested "checkpoint". Saving expired/sliding session HTTP acceptance
+and related documentation. Latest full Release validation: **418 passed, none
+skipped**, including twenty-two PostgreSQL cases. Whitespace checks passed.
+Application session configuration and shared learner data are unchanged.
+No push performed.
+
 ## Future entry format
 
 At subsequent checkpoints, append:
