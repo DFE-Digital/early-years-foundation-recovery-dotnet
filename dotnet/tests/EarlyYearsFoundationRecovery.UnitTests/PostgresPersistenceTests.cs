@@ -114,6 +114,7 @@ public sealed partial class PostgresPersistenceTests : IAsyncLifetime
             await service.RecordPageViewAsync(account, Module.Name, "learning", CancellationToken.None);
             await service.RecordConfidenceCheckQuestionViewAsync(account, Module.Name, "pre-one", CancellationToken.None);
             await service.SubmitAnswerAsync(account, Module.Name, "pre-one", ["1"], CancellationToken.None);
+            db.ChangeTracker.Clear();
             started = (await new TrainingProgressStore(db).FindConfidenceCheckAsync(
                 ownerId, Module.Name, "pre", CancellationToken.None))!.StartedAt;
         }
@@ -127,6 +128,7 @@ public sealed partial class PostgresPersistenceTests : IAsyncLifetime
             await service.SubmitAnswerAsync(account, Module.Name, "pre-one", ["2"], CancellationToken.None);
             await service.RecordConfidenceCheckQuestionViewAsync(account, Module.Name, "pre-two", CancellationToken.None);
             await service.RecordConfidenceCheckQuestionViewAsync(account, Module.Name, "post-one", CancellationToken.None);
+            db.ChangeTracker.Clear();
             completed = (await new TrainingProgressStore(db).FindConfidenceCheckAsync(
                 ownerId, Module.Name, "pre", CancellationToken.None))!.CompletedAt;
         }

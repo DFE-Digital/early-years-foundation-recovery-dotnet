@@ -1448,6 +1448,23 @@ diagnostics passed. This is sequential in-process host reconstruction, not an
 OS-process or PostgreSQL restart and not deployment key-storage validation.
 Updated acceptance/README; earlier uncommitted changes retained.
 
+### Checkpoint 39: replace legacy Ruby CI with .NET acceptance
+
+User requested removing the automatic Ruby test/deploy action in this fork in
+favour of the .NET suite. Removed legacy Ruby CI (which used the protected `test`
+environment). The .NET workflow now runs for every PR and merge group, main pushes
+and manual dispatch, without path-filtered missing checks or duplicate branch-push
+runs. Rails DEV deployment is manual-only; production/staging and label-opted-in
+review app workflows are unchanged. No .NET deployment introduced.
+
+Inspected the first Linux CI failure: two tests compared EF-tracked sub-microsecond
+timestamps with PostgreSQL's persisted microsecond values. Capture the confidence
+lifecycle baseline after clearing tracking and session baseline using AsNoTracking;
+exact persisted-value assertions remain, rather than weakened time tolerances.
+Full local Release validation: **423 passed, none skipped**, PostgreSQL enabled.
+Workflow YAML parsed and exact trigger assertions passed. README documents the
+automatic gate, manual legacy deployment and potential branch-protection update.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

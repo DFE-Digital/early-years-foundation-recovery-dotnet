@@ -2,13 +2,11 @@ name: .NET
 
 on:
   push:
-    paths:
-      - "dotnet/**"
-      - ".github/workflows/dotnet.yml"
+    branches:
+      - main
   pull_request:
-    paths:
-      - "dotnet/**"
-      - ".github/workflows/dotnet.yml"
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read

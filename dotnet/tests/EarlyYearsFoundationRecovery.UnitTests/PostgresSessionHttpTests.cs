@@ -147,7 +147,7 @@ public sealed partial class PostgresPersistenceTests
             await service.RecordPageViewAsync(account, Module.Name, "learning", CancellationToken.None);
             await service.SavePageNoteAsync(account, Module.Name, "first", "Saved before expiry", CancellationToken.None);
             await service.SubmitAnswerAsync(account, Module.Name, "test-one", ["a", "b"], CancellationToken.None);
-            startedAt = Assert.IsType<DateTimeOffset>((await db.TrainingModuleProgress.SingleAsync()).StartedAt);
+            startedAt = Assert.IsType<DateTimeOffset>((await db.TrainingModuleProgress.AsNoTracking().SingleAsync()).StartedAt);
         }
         var clock = new SessionTestClock();
         using var factory = CreateSessionFactory(clock);

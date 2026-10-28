@@ -10,6 +10,24 @@ See the [core acceptance inventory](ACCEPTANCE.md) for source-backed journey sta
 
 The [AI-assisted development log](AI-LOG.md) records checkpoint history, decisions, validation and limitations. Its initial history was backfilled retrospectively; it is not a verbatim conversation transcript.
 
+## Fork CI and deployment
+
+The `.NET` workflow is the automatic application test gate for this fork: it
+runs on pull requests, merge-queue groups and pushes to `main`, and can also be
+started manually. It builds Release and runs the full suite with PostgreSQL 17
+and Chromium, without the legacy Ruby CI's protected `test` environment or Rails
+credentials. Pull requests are not path-filtered, so documentation-only changes
+also receive the check.
+
+Legacy Ruby CI has been removed. The Rails Azure DEV deployment is manual-only;
+merging this implementation does not automatically deploy Rails or .NET.
+Existing manual production/staging workflows and label-opted-in Rails review
+apps are unchanged. No .NET deployment is introduced here.
+
+If branch protection requires the old `Test and lint code` check, replace that
+requirement with the `.NET` workflow's `build-and-test` check in repository
+settings before merging.
+
 ## Projects
 
 - `src/EarlyYearsFoundationRecovery.Domain` — user, progress, notes, and assessment rules.

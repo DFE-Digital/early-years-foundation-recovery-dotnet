@@ -2,22 +2,6 @@ name: "App Deploy [Azure - DEV]"
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/*.md"
-      - .docker*
-      - .env.example
-      - .github
-      - .gitignore
-      - .pa11yci
-      - .tool-versions
-      - .yardopts
-      - bin/*
-      - docker-compose.*
-      - terraform-azure/**
-      - uml/*
 
 # Permissions for OIDC authentication
 permissions:
