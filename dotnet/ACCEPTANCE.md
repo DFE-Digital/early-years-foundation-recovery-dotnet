@@ -1,8 +1,8 @@
 # Core rewrite acceptance inventory
 
-Checkpoint 27 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
+Checkpoint 28 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
 journey acceptance after committed slices 17-20 (`5b78d2c7`).
-The latest local Release suite passed **398 tests**, including sixteen PostgreSQL
+The latest local Release suite passed **399 tests**, including seventeen PostgreSQL
 integration cases with none skipped. See [the AI log](AI-LOG.md) for
 per-slice evidence and checkpoint history.
 This inventory is not a production-readiness declaration or evidence that CI ran.
@@ -175,6 +175,15 @@ vulnerabilities or completed audits.
    cosmetic pass and must not be postponed until after release.
 
 ## Decisions and exit criteria
+
+Targeted accessibility evidence: the shared registration/account name form now
+has an Error-prefixed page title, focused and labelled linked error summary,
+friendly field labels in validation, and error descriptions/invalid state on
+inputs. An [HTTP regression](tests/EarlyYearsFoundationRecovery.UnitTests/PostgresAccountEditHttpTests.cs)
+checks both routes and unchanged saved names. Integrated-browser validation
+confirmed summary focus and Tab/Enter navigation into an invalid field; returning
+to the account confirmed no name changes. This is not a full Q04 accessibility
+review; other forms and assistive-technology/browser combinations remain.
 
 - Preserve passing-assessment requirements while deciding completion timing.
   Rails behaviour and the current stricter .NET guard must be reconciled explicitly.

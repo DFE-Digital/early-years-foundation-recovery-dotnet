@@ -10,10 +10,12 @@ public sealed class TermsModel
 
 public sealed class NameModel
 {
+    [Display(Name = "First name")]
     [Required]
     [StringLength(100)]
     public string FirstName { get; set; } = string.Empty;
 
+    [Display(Name = "Last name")]
     [Required]
     [StringLength(100)]
     public string LastName { get; set; } = string.Empty;

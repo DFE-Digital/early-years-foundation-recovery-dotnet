@@ -1183,6 +1183,35 @@ actions and explicit deferred-feedback continuation evidence.
 Existing cookies without the learner ID claim require fresh sign-in.
 No database migration. Nothing pushed; local app remains running.
 
+### Checkpoint 28 (in progress): name-form keyboard error recovery
+
+**User objective:** continue, moving into targeted browser interaction checks.
+The shared browser initially had an older session; used Development sign-in,
+then submitted empty name fields only. Observed inline errors without an error
+summary or associated error descriptions. No valid name edit was submitted.
+
+Updated the shared registration/account name form with friendly validation
+display names, Error-prefixed title, labelled/focusable autofocus summary with
+links ordered by field name, and aria-invalid/aria-describedby on invalid inputs.
+Error text remains Razor encoded. No JavaScript dependency added.
+Added HTTP coverage of both name routes and unchanged persisted names.
+
+Targeted regression and full Release suite with PostgreSQL enabled passed:
+**399 passed, none skipped**. Editor diagnostics passed. Restarted the local app;
+browser confirmed the summary receives focus and Tab/Enter navigates its error
+link to the input. Returned to My account and confirmed the saved name unchanged.
+Only sign-in and rejected edits were performed on the shared learner; no saved
+profile/training edits. Other forms and full screen-reader/accessibility review
+remain outstanding. Updated README/acceptance evidence; changes uncommitted.
+
+#### Checkpoint commit for slice 28
+
+User requested "checkpoint and continue". Checkpoint commit:
+`Improve name form validation and keyboard error recovery`.
+Final full Release validation: **399 passed, none skipped**, PostgreSQL enabled.
+Whitespace checks passed. Includes shared name-form accessibility changes,
+HTTP regression and browser evidence. Nothing pushed. Continuing separately.
+
 ## Future entry format
 
 At subsequent checkpoints, append:

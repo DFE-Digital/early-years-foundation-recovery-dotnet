@@ -175,6 +175,9 @@ all-or-nothing validation of dependent answers, changing to a no-role setting,
 location/authority validation, custom-role editing and independent email/research
 preferences. Fresh contexts verify unchanged answers after rejected forms and
 saved values after successful changes.
+The shared registration/account name form has a focused linked error summary,
+an Error-prefixed page title and field-associated error text. HTTP tests cover
+both routes and ensure rejected edits leave the saved name unchanged.
 A closure HTTP case checks reason validation, repeated confirmation after
 sign-out, a second already-authenticated session and subsequent Development
 sign-in. Old notes are deleted; retained assessment/progress records stay linked

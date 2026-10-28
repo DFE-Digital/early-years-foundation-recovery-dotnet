@@ -6,6 +6,35 @@ namespace EarlyYearsFoundationRecovery.UnitTests;
 public sealed partial class PostgresPersistenceTests
 {
     [PostgresFact]
+    public async Task HttpInvalidNameHasLinkedErrorsWithoutChangingSavedName()
+    {
+        await SeedEditableAccountAsync();
+        using var factory = CreateHttpFactory();
+        using var client = CreateRegistrationClient(factory);
+        AssertHttpRedirect(await SubmitFormAsync(client, "/account/sign-in", "/account/development-sign-in"), "/account");
+        foreach (var path in new[] { "/account/name", "/registration/name" })
+        {
+            using var invalid = await SubmitFormAsync(client, path, path,
+                ("FirstName", ""), ("LastName", ""));
+            Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+            var html = await invalid.Content.ReadAsStringAsync();
+            Assert.Contains("<title>Error:", html);
+            Assert.Contains("There is a problem", html);
+            Assert.Contains("tabindex=\"-1\" autofocus", html);
+            Assert.Contains("href=\"#FirstName\"", html);
+            Assert.Contains("href=\"#LastName\"", html);
+            Assert.Contains("The First name field is required.", html);
+            Assert.Contains("The Last name field is required.", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"first-name-error\"", html);
+            Assert.Contains("aria-invalid=\"true\" aria-describedby=\"last-name-error\"", html);
+        }
+        await using var db = CreateContext();
+        var account = await db.UserAccounts.SingleAsync();
+        Assert.Equal("Alex", account.FirstName);
+        Assert.Equal("Example", account.LastName);
+    }
+
+    [PostgresFact]
     public async Task HttpSettingPreviewCancelAndInvalidSavePreserveDetailsBeforeAtomicChange()
     {
         await SeedEditableAccountAsync();

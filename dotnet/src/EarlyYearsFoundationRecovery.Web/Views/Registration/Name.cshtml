@@ -2,6 +2,40 @@
 @{
     var isAccountEdit = ViewData["IsAccountEdit"] is true;
     ViewData["Title"] = isAccountEdit ? "Change your name" : "Your name";
+    var firstNameInvalid = ViewData.ModelState[nameof(Model.FirstName)]?.Errors.Count > 0;
+    var lastNameInvalid = ViewData.ModelState[nameof(Model.LastName)]?.Errors.Count > 0;
+    if (!ViewData.ModelState.IsValid)
+    {
+        ViewData["Title"] = $"Error: {ViewData["Title"]}";
+    }
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="validation-summary" role="alert" aria-labelledby="name-errors-title" tabindex="-1" autofocus>
+        <h2 id="name-errors-title">There is a problem</h2>
+        <ul>
+            @foreach (var entry in ViewData.ModelState.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+            {
+                if (entry.Value is not { } state)
+                {
+                    continue;
+                }
+                foreach (var error in state.Errors)
+                {
+                    <li>
+                        @if (entry.Key is nameof(Model.FirstName) or nameof(Model.LastName))
+                        {
+                            <a href="#@entry.Key">@error.ErrorMessage</a>
+                        }
+                        else
+                        {
+                            @error.ErrorMessage
+                        }
+                    </li>
+                }
+            }
+        </ul>
+    </div>
 }
 <h1>@(isAccountEdit ? "Change your name" : "What is your name?")</h1>
 @if (isAccountEdit)
@@ -9,17 +43,16 @@
     <p>This is the name that will appear on your end of module certificate.</p>
     <p>Changing your name on this account will not affect your GOV.UK One Login.</p>
 }
-<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
 <form asp-controller="@(isAccountEdit ? "Account" : "Registration")" asp-action="Name" method="post">
     <div class="form-group">
         <label asp-for="FirstName">First name</label>
-        <input asp-for="FirstName" autocomplete="given-name" class="text-input" />
-        <span asp-validation-for="FirstName" class="field-error"></span>
+        <input asp-for="FirstName" autocomplete="given-name" class="text-input" aria-invalid="@(firstNameInvalid ? "true" : null)" aria-describedby="@(firstNameInvalid ? "first-name-error" : null)" />
+        <span asp-validation-for="FirstName" class="field-error" id="first-name-error"></span>
     </div>
     <div class="form-group">
         <label asp-for="LastName">Last name</label>
-        <input asp-for="LastName" autocomplete="family-name" class="text-input" />
-        <span asp-validation-for="LastName" class="field-error"></span>
+        <input asp-for="LastName" autocomplete="family-name" class="text-input" aria-invalid="@(lastNameInvalid ? "true" : null)" aria-describedby="@(lastNameInvalid ? "last-name-error" : null)" />
+        <span asp-validation-for="LastName" class="field-error" id="last-name-error"></span>
     </div>
     <button class="button" type="submit">@(isAccountEdit ? "Save" : "Continue")</button>
 </form>
