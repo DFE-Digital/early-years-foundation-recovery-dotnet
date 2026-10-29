@@ -1,0 +1,154 @@
+@model EarlyYearsFoundationRecovery.Web.Models.TrainingPageViewModel
+@inject EarlyYearsFoundationRecovery.Web.Content.TrainingContentRenderer ContentRenderer
+@{
+    ViewData["Title"] = Model.Title;
+    var isQuestion = Model.Page.PageType is "formative" or "summative" or "confidence" or "pre_confidence";
+    var showDescription = Model.Page.PageType == "confidence" && !string.IsNullOrWhiteSpace(Model.Page.Description);
+    var showHint = Model.IsConfidenceCheck && !string.IsNullOrWhiteSpace(Model.Page.Hint);
+    var answerDescriptionIds = $"{(showDescription ? "question-description " : "")}{(showHint ? "question-hint " : "")}answer-error";
+}
+<p class="back-link"><a asp-action="Module" asp-route-moduleName="@Model.Module.Name">Back to @Model.Module.Title</a></p>
+<p class="eyebrow">@Model.Module.Title</p>
+<h1>@Model.Title</h1>
+
+@if (isQuestion)
+{
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div asp-validation-summary="All" class="validation-summary" role="alert"></div>
+    }
+    <form asp-action="Answer" asp-route-moduleName="@Model.Module.Name" asp-route-questionName="@Model.Page.Name" method="post">
+        <fieldset class="form-group">
+            <legend class="content-body">@ContentRenderer.Render(Model.Page.Body)</legend>
+            @if (showDescription)
+            {
+                <div class="hint content-body" id="question-description">@ContentRenderer.Render(Model.Page.Description)</div>
+            }
+            @if (showHint)
+            {
+                <p class="hint" id="question-hint">@Model.Page.Hint</p>
+            }
+            @if (!Model.IsConfidenceCheck)
+            {
+                <p>@(Model.Page.AllowsMultipleAnswers ? "Select all answers that apply." : "Select one answer.")</p>
+            }
+            <span asp-validation-for="SelectedAnswerIds" class="field-error" id="answer-error"></span>
+            @foreach (var option in Model.Page.Options ?? [])
+            {
+                <label class="checkbox-label">
+                    <input type="@(Model.Page.AllowsMultipleAnswers ? "checkbox" : "radio")" name="SelectedAnswerIds" value="@option.Id" checked="@Model.SelectedAnswerIds.Contains(option.Id)" disabled="@Model.IsReadOnly" aria-describedby="@answerDescriptionIds" />
+                    @option.Label
+                </label>
+            }
+        </fieldset>
+        @if (Model.PreviousPage is not null)
+        {
+            <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.PreviousPage.Name">Previous</a>
+        }
+        @if (Model.IsReadOnly)
+        {
+            @if (Model.Page.PageType == "formative")
+            {
+                <p role="status">@(Model.IsFormativeAnswerCorrect ? "That's right." : "That's not quite right.") Your answer has been saved and cannot be changed.</p>
+                <partial name="_FormativeFeedback" model="new EarlyYearsFoundationRecovery.Web.Models.FormativeFeedbackViewModel(Model.Page, Model.IsFormativeAnswerCorrect)" />
+            }
+            else
+            {
+                <p role="status">You have passed this assessment. Your answers cannot be changed.</p>
+            }
+            @if (Model.NextPage is not null)
+            {
+                <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
+            }
+            else
+            {
+                <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+            }
+        }
+        else
+        {
+            <button class="button" type="submit">@(Model.IsConfidenceCheck ? "Next" : Model.Page.PageType == "summative" ? "Save and continue" : "Check answer")</button>
+        }
+    </form>
+}
+else if (Model.Page.PageType == "feedback")
+{
+    <p>Feedback collection is not available in this version of the service.</p>
+    <p>No feedback has been submitted.</p>
+    @if (Model.AfterFeedbackPage is { } continuation)
+    {
+        <a class="button" asp-controller="Training" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@continuation.Name">Continue without submitting feedback</a>
+    }
+    else
+    {
+        <a class="button" asp-controller="Training" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+    }
+}
+else
+{
+    <div class="content-body">
+        @ContentRenderer.Render(Model.Page.Body)
+    </div>
+    @if (Model.Page.Video is { } video)
+    {
+        @if (video.EmbedUrl is not null)
+        {
+            <iframe class="training-video" src="@video.EmbedUrl" title="@(string.IsNullOrWhiteSpace(video.Title) ? Model.Title : video.Title)" allow="fullscreen; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            <p>If the player does not load, <a href="@video.EmbedUrl" target="_blank" rel="noopener noreferrer">open the video in a new tab</a> or read the transcript below.</p>
+        }
+        else
+        {
+            <p>Video not yet available. You can read the transcript below.</p>
+        }
+        <details class="video-transcript">
+            <summary>Transcript</summary>
+            <div class="content-body">
+                @if (string.IsNullOrWhiteSpace(video.Transcript))
+                {
+                    <p>A transcript is not yet available for this video.</p>
+                }
+                else
+                {
+                    @ContentRenderer.Render(video.Transcript)
+                }
+            </div>
+        </details>
+    }
+    @if (Model.Page.PageType == "thankyou")
+    {
+        <div class="notification notification--success" role="status">
+            <p>Your module is complete.</p>
+            <a asp-controller="Training" asp-action="Index">Return to my modules</a>
+        </div>
+    }
+    @if (Model.PreviousPage is not null)
+    {
+        <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.PreviousPage.Name">Previous</a>
+    }
+    @if (Model.Page.SupportsNotes)
+    {
+        <form asp-controller="Training" asp-action="SaveNote" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.Page.Name" method="post">
+            <div asp-validation-summary="All" class="validation-summary" role="alert"></div>
+            <div class="form-group">
+                <h2>Add to your learning log</h2>
+                <p id="note-hint">Use this space to reflect on this page. Do not enter personal or sensitive information like children's names.</p>
+                <label asp-for="Note.Content">Your notes</label>
+                <textarea asp-for="Note.Content" rows="5" aria-describedby="note-hint note-error"></textarea>
+                <span asp-validation-for="Note.Content" class="field-error" id="note-error"></span>
+            </div>
+            <button class="button" type="submit">Save and continue</button>
+        </form>
+    }
+    else if (Model.NextPage is not null)
+    {
+        <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.NextPage.Name">Continue</a>
+    }
+    else
+    {
+        <a class="button" asp-action="Module" asp-route-moduleName="@Model.Module.Name">Return to module</a>
+    }
+    @if (Model.SkipPreConfidencePage is { } skipPage)
+    {
+        <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@skipPage.Name">Skip questions</a>
+    }
+}

@@ -1,0 +1,13 @@
+@model EarlyYearsFoundationRecovery.Web.Models.CertificateViewModel
+@inject EarlyYearsFoundationRecovery.Web.Content.CertificateRenderer CertificateRenderer
+@{
+    ViewData["Title"] = "Get your certificate";
+}
+<h1>Get your certificate</h1>
+<p>Congratulations! You have now completed this module.</p>
+<p>If the name on your certificate is not what you expect, you can update it in <a asp-controller="Account" asp-action="Index">My account</a>.</p>
+@CertificateRenderer.RenderBody(Model.Certificate)
+<p>
+    <a class="button" href="@Url.Content($"~/training/{Uri.EscapeDataString(Model.ModuleName)}/certificate.pdf")">Download or print your certificate (PDF)</a>
+</p>
+<p><a asp-action="Index">Return to my modules</a></p>

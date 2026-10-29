@@ -1,0 +1,73 @@
+@model EarlyYearsFoundationRecovery.Web.Models.AccountRoleModel
+@{
+    ViewData["Title"] = ViewData.ModelState.IsValid ? "Change role and experience" : "Error: Change role and experience";
+    var roleInvalid = ViewData.ModelState[nameof(Model.RoleType)]?.Errors.Count > 0;
+    var descriptionInvalid = ViewData.ModelState[nameof(Model.RoleTypeOther)]?.Errors.Count > 0;
+    var experienceInvalid = ViewData.ModelState[nameof(Model.EarlyYearsExperience)]?.Errors.Count > 0;
+    var fields = new[] { nameof(Model.RoleType), nameof(Model.RoleTypeOther), nameof(Model.EarlyYearsExperience) };
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="validation-summary" role="alert" aria-labelledby="role-errors-title" tabindex="-1" autofocus>
+        <h2 id="role-errors-title">There is a problem</h2>
+        <ul>
+            @foreach (var entry in ViewData.ModelState.OrderBy(entry => Array.IndexOf(fields, entry.Key)))
+            {
+                if (entry.Value is not { } state)
+                {
+                    continue;
+                }
+                foreach (var error in state.Errors)
+                {
+                    <li>
+                        @if (fields.Contains(entry.Key) &&
+                            (entry.Key != nameof(Model.RoleTypeOther) || Model.Roles.Any(role => role.Name == "other")))
+                        {
+                            <a href="#@entry.Key">@error.ErrorMessage</a>
+                        }
+                        else
+                        {
+                            @error.ErrorMessage
+                        }
+                    </li>
+                }
+            }
+        </ul>
+    </div>
+}
+<h1>Change role and experience</h1>
+<form asp-controller="Account" asp-action="Role" method="post">
+    <div class="form-group">
+        <label asp-for="RoleType">Role</label>
+        <select asp-for="RoleType" class="select-input" aria-invalid="@(roleInvalid ? "true" : null)" aria-describedby="@(roleInvalid ? "role-error" : null)">
+            <option value="">Select a role</option>
+            @foreach (var role in Model.Roles)
+            {
+                <option value="@role.Name">@role.Name</option>
+            }
+        </select>
+        <span asp-validation-for="RoleType" class="field-error" id="role-error"></span>
+    </div>
+    @if (Model.Roles.Any(role => role.Name == "other"))
+    {
+        <div class="form-group">
+            <label asp-for="RoleTypeOther">Describe your role</label>
+            <p id="role-hint">Only complete this if you selected other.</p>
+            <input asp-for="RoleTypeOther" class="text-input" aria-invalid="@(descriptionInvalid ? "true" : null)" aria-describedby="@(descriptionInvalid ? "role-hint role-description-error" : "role-hint")" />
+            <span asp-validation-for="RoleTypeOther" class="field-error" id="role-description-error"></span>
+        </div>
+    }
+    <div class="form-group">
+        <label asp-for="EarlyYearsExperience">How long have you worked in early years?</label>
+        <select asp-for="EarlyYearsExperience" class="select-input" aria-invalid="@(experienceInvalid ? "true" : null)" aria-describedby="@(experienceInvalid ? "experience-error" : null)">
+            <option value="">Select an answer</option>
+            @foreach (var experience in Model.Experiences)
+            {
+                <option value="@experience.Id">@experience.Name</option>
+            }
+        </select>
+        <span asp-validation-for="EarlyYearsExperience" class="field-error" id="experience-error"></span>
+    </div>
+    <button class="button" type="submit">Save</button>
+</form>
+<p><a asp-controller="Account" asp-action="Index">Cancel</a></p>

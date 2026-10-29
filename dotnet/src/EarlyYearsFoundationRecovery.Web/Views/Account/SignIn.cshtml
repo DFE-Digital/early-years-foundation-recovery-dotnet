@@ -1,0 +1,16 @@
+@inject Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider AuthenticationSchemes
+@{
+    ViewData["Title"] = "Sign in";
+}
+<h1>Sign in</h1>
+<p>Use GOV.UK One Login to access your account and continue your training.</p>
+@if (await AuthenticationSchemes.GetSchemeAsync(Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectDefaults.AuthenticationScheme) is not null)
+{
+    <a class="button" asp-action="OneLoginSignIn">Sign in with GOV.UK One Login</a>
+}
+<div class="notification notification--info">
+    <p>Development environment: use the local sign-in button to test the application.</p>
+    <form asp-action="DevelopmentSignIn" method="post">
+        <button class="button" type="submit">Sign in as a local test user</button>
+    </form>
+</div>

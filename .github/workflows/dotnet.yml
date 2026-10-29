@@ -1,0 +1,41 @@
+name: .NET
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: eyfr_test
+          POSTGRES_PASSWORD: integration-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U eyfr_test -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      EYFR_TEST_POSTGRES: Host=localhost;Database=postgres;Username=eyfr_test;Password=integration-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore dotnet/EarlyYearsFoundationRecovery.slnx
+      - run: dotnet build dotnet/EarlyYearsFoundationRecovery.slnx --no-restore --configuration Release
+      - run: pwsh dotnet/src/EarlyYearsFoundationRecovery.Web/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+      - run: dotnet test dotnet/EarlyYearsFoundationRecovery.slnx --no-build --configuration Release

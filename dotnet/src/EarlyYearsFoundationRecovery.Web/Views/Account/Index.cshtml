@@ -1,0 +1,54 @@
+@model EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount
+@inject EarlyYearsFoundationRecovery.Application.Contracts.IRegistrationOptionsProvider RegistrationOptions
+@{
+    ViewData["Title"] = "My account";
+}
+<h1>My account</h1>
+<dl class="summary-list">
+    <dt>Name</dt>
+    <dd>@Model.FirstName @Model.LastName <a asp-controller="Account" asp-action="Name">Change name</a></dd>
+    <dt>Email address</dt>
+    <dd>@Model.Email</dd>
+    <dt>Registration</dt>
+    <dd>@(Model.IsRegistrationComplete ? "Complete" : "In progress")</dd>
+</dl>
+<p>This is the name that will appear on your end of module certificate.</p>
+<p>Changing your name on this account will not affect your GOV.UK One Login.</p>
+@if (Model.IsRegistrationComplete)
+{
+    <h2>Where you live</h2>
+    <dl class="summary-list">
+        <dt>Country</dt>
+        <dd>@Model.Country</dd>
+        <dt>Local authority</dt>
+        <dd>@(Model.SettingRequiresLocalAuthority && Model.Country == "England" ? Model.LocalAuthority : "Not applicable")</dd>
+    </dl>
+    <p><a asp-controller="Account" asp-action="Location">Change where you live</a></p>
+    <h2>Setting</h2>
+    var setting = (await RegistrationOptions.GetSettingsAsync(Context.RequestAborted))
+        .SingleOrDefault(item => item.Id == Model.SettingType);
+    <p>@(Model.SettingType == "other" ? Model.SettingTypeOther : setting?.Name ?? Model.SettingType)</p>
+    <p><a asp-controller="Account" asp-action="Setting">Change setting</a></p>
+    <h2>Role and experience</h2>
+    @if (Model.RoleGroup == "none")
+    {
+        <p>Not applicable</p>
+    }
+    else
+    {
+        <dl class="summary-list">
+            <dt>Role</dt>
+            <dd>@(Model.RoleType == "other" ? Model.RoleTypeOther : Model.RoleType)</dd>
+            <dt>Early years experience</dt>
+            <dd>@(RegistrationOptions.GetExperiences().SingleOrDefault(item => item.Id == Model.EarlyYearsExperience)?.Name ?? Model.EarlyYearsExperience)</dd>
+        </dl>
+        <p><a asp-controller="Account" asp-action="Role">Change role and experience</a></p>
+    }
+    <h2>Email preferences</h2>
+    <p>@(Model.TrainingEmails == true ? "You have chosen to receive emails about this training course." : "You have chosen not to receive emails about this training course.")</p>
+    <p><a asp-controller="Account" asp-action="EmailPreferences">Change email preferences</a></p>
+    <h2>Research preferences</h2>
+    <p>@(Model.ResearchParticipant == true ? "You have chosen to participate in research." : "You have chosen not to participate in research.")</p>
+    <p><a asp-controller="Account" asp-action="ResearchPreferences">Change research preferences</a></p>
+}
+<p><a asp-controller="Account" asp-action="Close">Close your account</a></p>

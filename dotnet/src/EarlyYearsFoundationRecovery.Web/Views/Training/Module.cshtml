@@ -1,0 +1,66 @@
+@model EarlyYearsFoundationRecovery.Web.Models.TrainingModuleDetailViewModel
+@inject EarlyYearsFoundationRecovery.Web.Content.TrainingContentRenderer ContentRenderer
+@{
+    ViewData["Title"] = Model.Module.Title;
+}
+<p class="back-link"><a asp-action="Index">Back to my modules</a></p>
+<h1>@Model.Module.Title</h1>
+@if (TempData["TrainingNotice"] is string notice)
+{
+    <div class="notification notification--info" role="status">@notice</div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.Module.Description))
+{
+    <div class="content-body">@ContentRenderer.Render(Model.Module.Description)</div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.Module.Outcomes))
+{
+    <div class="content-body">
+        <p>On completion of this module you will be able to:</p>
+        @ContentRenderer.Render(Model.Module.Outcomes)
+    </div>
+}
+@if (!string.IsNullOrWhiteSpace(Model.Module.Criteria))
+{
+    <h2>This module covers:</h2>
+    <div class="content-body">@ContentRenderer.Render(Model.Module.Criteria)</div>
+}
+<p>@Model.VisitedPageCount of @Model.Module.Pages.Count pages visited</p>
+<h2>Module content</h2>
+<ol class="module-sections">
+    @foreach (var overviewSection in Model.Sections)
+    {
+        <li class="module-section">
+            <h3>@overviewSection.Title</h3>
+            <p class="hint">@overviewSection.Status@if (overviewSection.PageCount > 1)
+                {
+                    <span> &middot; @overviewSection.PageCount pages</span>
+                }
+            </p>
+            @if (overviewSection.Topics.Count > 0)
+            {
+                <ul class="module-topics">
+                    @foreach (var topic in overviewSection.Topics)
+                    {
+                        <li>
+                            @if (topic.PageName is not null)
+                            {
+                                <a asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@topic.PageName">@topic.Title</a>
+                            }
+                            else
+                            {
+                                <span>@topic.Title</span>
+                            }
+                            <span class="topic-status">@topic.Status</span>
+                        </li>
+                    }
+                </ul>
+            }
+        </li>
+    }
+</ol>
+@if (Model.ResumePage is not null)
+{
+    <a class="button" asp-action="Page" asp-route-moduleName="@Model.Module.Name" asp-route-pageName="@Model.ResumePage.Name">@Model.ResumeLabel</a>
+}
+<p><a asp-controller="LearningLog" asp-action="Index">Open your learning log</a></p>

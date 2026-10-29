@@ -1,0 +1,21 @@
+@model EarlyYearsFoundationRecovery.Web.Models.PreferencesModel
+@{
+    ViewData["Title"] = "Email and research preferences";
+}
+<h1>Email and research preferences</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="Preferences" method="post">
+    <fieldset class="form-group">
+        <legend>Can we email you about your training?</legend>
+        <label class="radio-label"><input type="radio" asp-for="TrainingEmails" value="true" /> Yes</label>
+        <label class="radio-label"><input type="radio" asp-for="TrainingEmails" value="false" /> No</label>
+        <span asp-validation-for="TrainingEmails" class="field-error"></span>
+    </fieldset>
+    <fieldset class="form-group">
+        <legend>Would you like to take part in research about the training?</legend>
+        <label class="radio-label"><input type="radio" asp-for="ResearchParticipant" value="true" /> Yes</label>
+        <label class="radio-label"><input type="radio" asp-for="ResearchParticipant" value="false" /> No</label>
+        <span asp-validation-for="ResearchParticipant" class="field-error"></span>
+    </fieldset>
+    <button class="button" type="submit">Continue</button>
+</form>

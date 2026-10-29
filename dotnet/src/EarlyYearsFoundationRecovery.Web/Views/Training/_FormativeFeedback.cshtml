@@ -1,0 +1,20 @@
+@model EarlyYearsFoundationRecovery.Web.Models.FormativeFeedbackViewModel
+@inject EarlyYearsFoundationRecovery.Web.Content.TrainingContentRenderer ContentRenderer
+@if (!Model.Correct)
+{
+    <h2>Correct answer</h2>
+    <ul>
+        @foreach (var answer in Model.CorrectAnswers)
+        {
+            <li>@answer</li>
+        }
+    </ul>
+}
+@if (!string.IsNullOrWhiteSpace(Model.Guidance))
+{
+    @if (!Model.Correct)
+    {
+        <h2>Explanation</h2>
+    }
+    <div class="content-body">@ContentRenderer.Render(Model.Guidance)</div>
+}

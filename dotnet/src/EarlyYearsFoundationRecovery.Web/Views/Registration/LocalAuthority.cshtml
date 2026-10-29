@@ -1,0 +1,21 @@
+@model EarlyYearsFoundationRecovery.Web.Models.LocalAuthorityModel
+@{
+    ViewData["Title"] = "Your local authority";
+    var authorities = (IReadOnlyList<EarlyYearsFoundationRecovery.Application.Contracts.RegistrationChoice>)ViewBag.LocalAuthorities;
+}
+<h1>Which local authority is your setting in?</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<form asp-action="LocalAuthority" method="post">
+    <div class="form-group">
+        <label asp-for="LocalAuthority">Local authority</label>
+        <select asp-for="LocalAuthority" class="select-input">
+            <option value="">Select a local authority</option>
+            @foreach (var authority in authorities)
+            {
+                <option value="@authority.Id">@authority.Name</option>
+            }
+        </select>
+        <span asp-validation-for="LocalAuthority" class="field-error"></span>
+    </div>
+    <button class="button" type="submit">Continue</button>
+</form>

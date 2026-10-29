@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Early years child development training</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <header class="service-header">
+        <div class="container header-content">
+            <a class="service-name" asp-controller="Home" asp-action="Index">
+                <span class="service-name__brand">GOV.UK</span>
+                <span>Early years child development training</span>
+            </a>
+            <nav aria-label="Account navigation">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a asp-controller="Training" asp-action="Index">My modules</a>
+                    @await Component.InvokeAsync("LearningLogNavigation")
+                    <a asp-controller="Account" asp-action="Index">My account</a>
+                    <form asp-controller="Account" asp-action="SignOutUser" method="post" class="inline-form">
+                        <button class="link-button" type="submit">Sign out</button>
+                    </form>
+                }
+                else
+                {
+                    <a asp-controller="Account" asp-action="SignIn">Sign in</a>
+                }
+            </nav>
+        </div>
+    </header>
+    <main id="main-content" class="container main-content">
+        @if (TempData["Status"] is string status)
+        {
+            <div class="notification notification--success" role="status">@status</div>
+        }
+        @RenderBody()
+    </main>
+    <footer class="service-footer">
+        <div class="container">
+            <p>All content is available under the <a href="https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/">Open Government Licence v3.0</a>, except where otherwise stated.</p>
+            <p><a asp-controller="Home" asp-action="Privacy">Privacy</a></p>
+        </div>
+    </footer>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

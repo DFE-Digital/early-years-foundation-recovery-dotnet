@@ -1,0 +1,28 @@
+@model EarlyYearsFoundationRecovery.Domain.Accounts.UserAccount
+@{
+    ViewData["Title"] = "Check your answers";
+    static string Answer(string? value) => string.IsNullOrWhiteSpace(value) ? "Not answered" : value;
+    static string Preference(bool? value) => value.HasValue ? (value.Value ? "Yes" : "No") : "Not answered";
+}
+<h1>Check your answers</h1>
+<div asp-validation-summary="ModelOnly" class="validation-summary" role="alert"></div>
+<dl class="summary-list">
+    <dt>Terms and conditions</dt><dd>@(Model.TermsAndConditionsAgreedAt is null ? "Not agreed" : "Agreed") <a asp-controller="Registration" asp-action="Terms" asp-route-returnTo="check-your-answers">Change terms agreement</a></dd>
+    <dt>Name</dt><dd>@Answer($"{Model.FirstName} {Model.LastName}".Trim()) <a asp-controller="Registration" asp-action="Name" asp-route-returnTo="check-your-answers">Change name</a></dd>
+    <dt>Country</dt><dd>@Answer(Model.Country) <a asp-controller="Registration" asp-action="Location" asp-route-returnTo="check-your-answers">Change country</a></dd>
+    @if (Model.SettingRequiresLocalAuthority && string.Equals(Model.Country, "England", StringComparison.OrdinalIgnoreCase))
+    {
+        <dt>Local authority</dt><dd>@Answer(Model.LocalAuthority) <a asp-controller="Registration" asp-action="LocalAuthority" asp-route-returnTo="check-your-answers">Change local authority</a></dd>
+    }
+    <dt>Setting</dt><dd>@Answer((string?)ViewBag.SettingName) <a asp-controller="Registration" asp-action="Setting" asp-route-returnTo="check-your-answers">Change setting</a></dd>
+    @if (Model.RoleGroup != "none")
+    {
+        <dt>Role</dt><dd>@Answer(Model.RoleType == "other" ? Model.RoleTypeOther : Model.RoleType) <a asp-controller="Registration" asp-action="Role" asp-route-returnTo="check-your-answers">Change role</a></dd>
+        <dt>Experience</dt><dd>@Answer((string?)ViewBag.ExperienceName) <a asp-controller="Registration" asp-action="Experience" asp-route-returnTo="check-your-answers">Change experience</a></dd>
+    }
+    <dt>Training emails</dt><dd>@Preference(Model.TrainingEmails) <a asp-controller="Registration" asp-action="Preferences" asp-route-returnTo="check-your-answers">Change training email preference</a></dd>
+    <dt>Research participation</dt><dd>@Preference(Model.ResearchParticipant) <a asp-controller="Registration" asp-action="Preferences" asp-route-returnTo="check-your-answers">Change research preference</a></dd>
+</dl>
+<form asp-controller="Registration" asp-action="CompleteRegistration" method="post">
+    <button class="button" type="submit">Complete registration</button>
+</form>
