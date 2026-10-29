@@ -1,11 +1,15 @@
 # Core rewrite acceptance inventory
 
-Checkpoint 38 (in progress) on `rewrite/dotnet-core-journeys` extends core learner
-journey acceptance after committed slice 34 (`490df305`).
+The learner rewrite and subsequent CI fixes were merged into `main` through
+PR #3 on 29 October 2026 (`a3b76595`). See the [handoff plan](../plan.md)
+for the broader remaining work, including capabilities deferred by this inventory.
 The latest local Release suite passed **423 tests**, including twenty-five PostgreSQL
 integration cases with none skipped. See [the AI log](AI-LOG.md) for
 per-slice evidence and checkpoint history.
-This inventory is not a production-readiness declaration or evidence that CI ran.
+Linux GitHub CI also passed 423 tests in
+[run 40697158357](https://github.com/DFE-Digital/early-years-foundation-recovery-dotnet/actions/runs/40697158357).
+This inventory is not a production-readiness declaration. Older row-level evidence
+notes predate that run; interpret them alongside this baseline and the handoff plan.
 
 Local One Login testing now has an explicit configured-provider option in
 Development; see [setup instructions](README.md#testing-real-one-login-locally).

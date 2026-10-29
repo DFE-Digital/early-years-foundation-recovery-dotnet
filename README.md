@@ -1,5 +1,13 @@
 # Early years child development training
 
+## .NET migration handoff
+
+The side-by-side .NET learner implementation has been merged into this fork's
+`main`; this is not a production cutover. See [the remaining migration plan](plan.md)
+for the next-agent handoff and full Rails-retirement scope, and
+[the .NET README](dotnet/README.md) for running and testing it. The Rails setup
+documentation below remains relevant while both implementations coexist.
+
 [![ci][ci-badge]][ci-workflow]
 [![brakeman][brakeman-badge]][brakeman-workflow]
 [![pa11y][pa11y-badge]][pa11y-workflow]
